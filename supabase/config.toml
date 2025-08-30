@@ -1,0 +1,22 @@
+
+[functions.actualizar-precios-docta]
+enabled = true
+verify_jwt = true
+import_map = "./functions/actualizar-precios-docta/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/actualizar-precios-docta/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/actualizar-precios-docta/*.html" ]
+
+[functions.actualizar-tipo-cambio]
+enabled = true
+verify_jwt = true
+import_map = "./functions/actualizar-tipo-cambio/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/actualizar-tipo-cambio/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/actualizar-tipo-cambio/*.html" ]

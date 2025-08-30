@@ -1,0 +1,98 @@
+const express = require('express');
+const fetch = require('node-fetch');
+const { createClient } = require('@supabase/supabase-js');
+
+const app = express();
+app.use(express.json());
+
+const SUPABASE_URL = 'https://zcvkqujfneyphoiaqvuj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjdmtxdWpmbmV5cGhvaWFxdnVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU5NTM4MjIsImV4cCI6MjA3MTUyOTgyMn0.DQYhdzdnVxRonkcaNQzzPivwTiZvhF3gc8Fz2aYw6i4';
+const DOCTA_TOKEN = 'b9185669-9246-44ff-841c-2026baa88941';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+app.post('/actualizar-precios', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const { data: activos, error } = await supabase
+      .from('activos')
+      .select('*')
+      .eq('usuario_id', userId);
+
+    if (error) throw error;
+
+    if (!activos || activos.length === 0) {
+      return res.json({ message: 'No hay activos' });
+    }
+
+    const url = new URL('https://www.doctacapital.com.ar/api/series');
+    url.searchParams.append('adjusted', 'false');
+    url.searchParams.append('markets', 'stock.bond.cedear');
+    url.searchParams.append('tickers', activos.map(a => a.simbolo).join(','));
+    url.searchParams.append('columns', 'ticker,last_price');
+    url.searchParams.append('format', 'csv');
+    url.searchParams.append('token', DOCTA_TOKEN);
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'text/csv,*/*',
+        'Referer': 'https://script.google.com/'
+      }
+    });
+
+    const csvText = await response.text();
+    const lines = csvText.trim().split('\\n');
+    const headers = lines[0].split(',');
+    const lastPriceIndex = headers.indexOf('last_price');
+
+    if (lastPriceIndex === -1) {
+      throw new Error('No se encontró last_price');
+    }
+
+    const priceMap = {};
+    for (let i = 1; i < lines.length; i++) {
+      const row = lines[i].split(',');
+      const ticker = row[0].replace(/^"(.*)"$/, '$1');
+      const price = parseFloat(row[lastPriceIndex]);
+      if (!isNaN(price)) {
+        priceMap[ticker] = price;
+      }
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const { data: tcData } = await supabase
+      .from('tipos_cambio')
+      .select('tasa')
+      .eq('fecha', today)
+      .single();
+
+    const tipoCambio = tcData?.tasa || 1100;
+
+    for (const activo of activos) {
+      const precioUsd = priceMap[activo.simbolo];
+      if (precioUsd === undefined) continue;
+
+      const precioArs = activo.moneda === 'USD' ? precioUsd * tipoCambio : precioUsd;
+
+      await supabase
+        .from('activos')
+        .update({
+          ultimo_precio: precioUsd,
+          ultimo_precio_ars: precioArs,
+          fecha_actualizacion: new Date().toISOString(),
+        })
+        .eq('id', activo.id);
+    }
+
+    res.json({ message: 'Precios actualizados', updated: Object.keys(priceMap).length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor listo en puerto ${PORT}`);
+});

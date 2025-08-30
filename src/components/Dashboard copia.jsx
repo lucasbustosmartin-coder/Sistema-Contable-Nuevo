@@ -1,0 +1,360 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '../services/supabase';
+import Sidebar from './Sidebar';
+
+export default function ActivosManager({ user, setCurrentView }) {
+  const [activos, setActivos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [showModal, setShowModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [formData, setFormData] = useState({
+    tipo: '',
+    simbolo: '',
+    nombre: '',
+    moneda: ''
+  });
+  const [formError, setFormError] = useState('');
+
+  const tipos = ['accion', 'cedear', 'etf', 'bono'];
+  const monedas = ['ARS', 'USD'];
+
+  useEffect(() => {
+    loadActivos();
+  }, [user]);
+
+  const loadActivos = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const {   data, error: fetchError } = await supabase
+        .from('activos')
+        .select('*')
+        .eq('usuario_id', user.id)
+        .order('nombre', { ascending: true });
+
+      if (fetchError) throw fetchError;
+      setActivos(data || []);
+    } catch (err) {
+      console.error('❌ Error al cargar activos:', err.message);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openModal = (activo = null) => {
+    if (activo) {
+      setEditing(activo);
+      setFormData({
+        tipo: activo.tipo,
+        simbolo: activo.simbolo,
+        nombre: activo.nombre,
+        moneda: activo.moneda
+      });
+    } else {
+      setEditing(null);
+      setFormData({ tipo: '', simbolo: '', nombre: '', moneda: '' });
+    }
+    setFormError('');
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditing(null);
+    setFormData({ tipo: '', simbolo: '', nombre: '', moneda: '' });
+    setFormError('');
+  };
+
+  const openDeleteModal = (id) => {
+    setItemToDelete(id);
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setItemToDelete(null);
+    setShowDeleteModal(false);
+  };
+
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const { tipo, simbolo, nombre, moneda } = formData;
+
+    if (!tipo || !simbolo || !nombre || !moneda) {
+      setFormError('Todos los campos son obligatorios');
+      return;
+    }
+
+    try {
+      if (editing) {
+        const { error: updateError } = await supabase
+          .from('activos')
+          .update({ tipo, simbolo, nombre, moneda })
+          .eq('id', editing.id)
+          .eq('usuario_id', user.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('activos')
+          .insert({
+            usuario_id: user.id,
+            tipo,
+            simbolo: simbolo.toUpperCase(),
+            nombre,
+            moneda
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      await loadActivos();
+      closeModal();
+    } catch (err) {
+      console.error('Error al guardar el activo:', err.message);
+      setFormError('Error al guardar. Intenta nuevamente.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
+    try {
+      const { error: deleteError } = await supabase
+        .from('activos')
+        .delete()
+        .eq('id', itemToDelete)
+        .eq('usuario_id', user.id);
+
+      if (deleteError) throw deleteError;
+
+      await loadActivos();
+      closeDeleteModal();
+    } catch (err) {
+      console.error('Error al eliminar el activo:', err.message);
+      setError('Error al eliminar. Intenta nuevamente.');
+      closeDeleteModal();
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50 font-sans">
+      <Sidebar
+        currentView="activos"
+        setCurrentView={setCurrentView}
+        user={user}
+      />
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+          <h2 className="text-2xl font-semibold text-gray-800">Mis Activos</h2>
+        </header>
+
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md shadow-sm">
+              <p className="font-semibold mb-1">Error al cargar los datos</p>
+              <p className="text-sm">Detalles: <span className="font-mono text-red-800">{error}</span></p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-800">Lista de Activos</h3>
+                <button
+                  onClick={() => openModal()}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
+                >
+                  Nuevo Activo
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Símbolo</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Moneda</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {activos.length > 0 ? (
+                      activos.map((activo) => (
+                        <tr key={activo.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{activo.nombre}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{activo.simbolo}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">{activo.tipo}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{activo.moneda}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => openModal(activo)}
+                              className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors duration-150"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(activo.id)}
+                              className="text-red-600 hover:text-red-800 transition-colors duration-150"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                          No tenés activos registrados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Modal para Crear/Editar */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              {editing ? 'Editar Activo' : 'Nuevo Activo'}
+            </h3>
+
+            {formError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4 text-sm">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                  <select
+                    name="tipo"
+                    value={formData.tipo}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  >
+                    <option value="">Seleccionar tipo</option>
+                    {tipos.map((t) => (
+                      <option key={t} value={t}>
+                        {t === 'accion' ? 'Acción' : t === 'cedear' ? 'Cedear' : t === 'etf' ? 'ETF' : 'Bono'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Símbolo</label>
+                  <input
+                    type="text"
+                    name="simbolo"
+                    value={formData.simbolo}
+                    onChange={(e) => setFormData({ ...formData, simbolo: e.target.value.toUpperCase() })}
+                    placeholder="Ej: GGAL, AAPL, AL30"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                  <input
+                    type="text"
+                    name="nombre"
+                    value={formData.nombre}
+                    onChange={handleInputChange}
+                    placeholder="Ej: Grupo Galicia, Apple Inc."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
+                  <select
+                    name="moneda"
+                    value={formData.moneda}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  >
+                    <option value="">Seleccionar moneda</option>
+                    {monedas.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors duration-150"
+                >
+                  {editing ? 'Actualizar' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-auto">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirmar Eliminación</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              ¿Estás seguro de que deseas eliminar este activo? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors duration-150"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
