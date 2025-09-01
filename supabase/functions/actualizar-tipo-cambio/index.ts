@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  const DOCTA_API_URL = "https://www.doctacapital.com.ar/api/dollar-series?fromDate=2025-08-01T03%3A00%3A00.000Z&columns=date.usd_mep.usd_ccl.usd_oficial&format=csv&token=b9185669-9246-44ff-841c-2026baa88941";
+  const DOCTA_API_URL = "https://www.doctacapital.com.ar/api/dollar-series?fromDate=2024-01-01T03%3A00%3A00.000Z&columns=date.usd_mep.usd_ccl.usd_oficial&format=csv&token=b9185669-9246-44ff-841c-2026baa88941";
   const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjdmtxdWpmbmV5cGhvaWFxdnVqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTk1MzgyMiwiZXhwIjoyMDcxNTI5ODIyfQ.FqEIgbgHcRhCVFwZfrlP4qZt3hufyuucrat7XzsvlTk';
 
   const supabase = createClient(
