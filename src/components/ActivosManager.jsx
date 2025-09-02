@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import Sidebar from './Sidebar';
 import iconImage from '../assets/icon.png';
 
 export default function ActivosManager({ user, setCurrentView }) {
