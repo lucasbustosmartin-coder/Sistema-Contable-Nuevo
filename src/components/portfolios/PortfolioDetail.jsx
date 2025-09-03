@@ -72,16 +72,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     setMonedaSeleccionadaTransacciones(selectedCurrency);
   }, [selectedCurrency]);
   
-  useEffect(() => {
-    if (newTransaction.activo_id && newTransaction.broker_id) {
-        const currentHoldings = calculatePortfolioMetrics().holdings;
-        const disponible = currentHoldings[newTransaction.activo_id]?.brokers[newTransaction.broker_id]?.cantidad || 0;
-        setCantidadDisponible(disponible);
-    } else {
-        setCantidadDisponible(0);
-    }
-  }, [newTransaction.activo_id, newTransaction.broker_id, transacciones]);
-
   const handleFullUpdate = async () => {
     setIsUpdating(true);
     try {
@@ -209,7 +199,8 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     try {
       const { data, error } = await supabase
         .from('activos')
-        .select('id, nombre, simbolo, tipo, moneda, ultimo_precio, ultimo_precio_ars');
+        .select('id, nombre, simbolo, tipo, moneda, ultimo_precio, ultimo_precio_ars')
+        .order('simbolo', { ascending: true }); // ✅ MODIFICADO: ordenar por símbolo
       if (error) throw error;
       setActivos(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -276,7 +267,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       moneda: transaction.moneda,
       broker_id: transaction.broker_id || '',
     });
-    const currentHoldings = calculatePortfolioMetrics().holdings;
+    const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter).holdings;
     const disponible = currentHoldings[transaction.activo_id]?.brokers[transaction.broker_id]?.cantidad || 0;
     setCantidadDisponible(disponible);
     setShowAddTransactionModal(true);
@@ -291,7 +282,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
       
       if (newTransaction.tipo_operacion === 'venta') {
-        const currentHoldings = calculatePortfolioMetrics().holdings;
+        const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter).holdings;
         const holdingPorBroker = currentHoldings[newTransaction.activo_id]?.brokers[newTransaction.broker_id]?.cantidad || 0;
         
         if (parseFloat(newTransaction.cantidad) > holdingPorBroker) {
@@ -395,7 +386,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return value;
   };
 
-  const calculatePortfolioMetrics = () => {
+  const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos') => {
     const filteredTransactions = brokerFilter === 'todos'
       ? transacciones
       : transacciones.filter(t => t.broker_id === brokerFilter);
@@ -515,10 +506,11 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     const broker = brokers.find(b => b.id === brokerId);
     return broker ? broker.nombre : 'N/A';
   };
+  
+  // ✅ MODIFICADO: Se declara metrics una sola vez
+  const metrics = calculatePortfolioMetrics(transacciones, brokerFilter);
 
-  const metrics = calculatePortfolioMetrics();
-
-  const handleExport = async () => {
+  const handleExportTenencias = async () => {
     if (!isXLSXLoaded) {
       alert('La librería de exportación a Excel aún no ha cargado.');
       return;
@@ -584,6 +576,74 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       window.XLSX.utils.book_append_sheet(wb, ws, "Detalle de Compras");
       
       const filename = `Detalle_Tenencia_${portfolio.name.replace(/\s/g, '_')}.xlsx`;
+      window.XLSX.writeFile(wb, filename);
+
+    } catch (err) {
+      console.error("Error al exportar a Excel:", err);
+      alert("Error al exportar a Excel. Inténtalo de nuevo.");
+    } finally {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportTransacciones = async () => {
+    if (!isXLSXLoaded) {
+      alert('La librería de exportación a Excel aún no ha cargado.');
+      return;
+    }
+
+    if (transacciones.length === 0) {
+      alert('No hay transacciones para exportar.');
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const headers = [
+        'Activo',
+        'Bróker',
+        'Fecha',
+        'Tipo',
+        'Nominales',
+        'Moneda de Origen',
+        'Tipo de Cambio',
+        `Precio Unitario (${monedaSeleccionadaTransacciones})`,
+        `Costo Total (${monedaSeleccionadaTransacciones})`,
+      ];
+
+      const dataToExport = transactionsToDisplay.map(t => {
+        const precioUnitario = getTransactionPrice(t, monedaSeleccionadaTransacciones);
+        const costoTransaccion = getTransactionCost(t, monedaSeleccionadaTransacciones);
+        
+        return [
+          { v: `${t.activos.nombre} (${t.activos.simbolo})`, t: 's' },
+          { v: t.brokers?.nombre || '-', t: 's' },
+          { v: formatDate(t.fecha), t: 's' },
+          { v: t.tipo_operacion.toUpperCase(), t: 's' },
+          { v: parseFloat(t.cantidad), t: 'n' },
+          { v: t.moneda, t: 's' },
+          { v: getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha) : '-', t: 'n' },
+          { v: parseFloat(precioUnitario), t: 'n', z: '#,##0.00' },
+          { v: parseFloat(costoTransaccion), t: 'n', z: '#,##0.00' },
+        ];
+      });
+
+      const ws = window.XLSX.utils.aoa_to_sheet([]);
+      window.XLSX.utils.sheet_add_aoa(ws, [headers]);
+      window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+
+      ws['!cols'] = [
+        { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
+        { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 },
+        { wch: 20 }
+      ];
+
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Detalle de Transacciones");
+      
+      const filename = `Detalle_Transacciones_${portfolio.name.replace(/\s/g, '_')}.xlsx`;
       window.XLSX.writeFile(wb, filename);
 
     } catch (err) {
@@ -667,7 +727,8 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   const transactionsToDisplay = sortedTransacciones();
 
   const sortedResumenHoldings = () => {
-    const holdings = Object.values(metrics.holdings);
+    // ✅ MODIFICADO: Se pasa 'transacciones' a la función de cálculo
+    const holdings = Object.values(calculatePortfolioMetrics(transacciones, brokerFilter).holdings);
     const sortableItems = holdings.filter(holding => holding.cantidad > 0);
     
     if (sortResumenConfig.key !== null) {
@@ -884,7 +945,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         </h2>
       </header>
       
-      {/* ✅ NUEVO: Barra de notificación para el proceso de actualización */}
       {updateMessage && (
         <div className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 shadow-lg transition-all duration-300 ${
           updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border-b border-green-200' : 'bg-red-100 text-red-700 border-b border-red-200'
@@ -936,7 +996,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Resumen del Portafolio</h3>
               <div className="flex items-center space-x-4">
-                {/* ✅ Botón de actualización en la vista de Resumen */}
                 <button
                   onClick={handleFullUpdate}
                   disabled={isUpdating}
@@ -1127,12 +1186,12 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                   </button>
                 </div>
                 <button
-                  onClick={handleExport}
+                  onClick={handleExportTenencias}
                   disabled={isExporting || !isXLSXLoaded || transacciones.length === 0}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
                     isExporting || !isXLSXLoaded || transacciones.length === 0
                         ? 'bg-gray-400 cursor-not-allowed text-gray-200'
-                        : 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   }`}
                 >
                   {isExporting ? (
@@ -1144,7 +1203,12 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                       <span>Generando Excel...</span>
                     </>
                   ) : (
-                    <span>{isXLSXLoaded ? 'Exportar a Excel' : 'Cargando...'}</span>
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      <span>Exportar a Excel</span>
+                    </>
                   )}
                 </button>
               </div>
@@ -1270,6 +1334,32 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                     USD
                   </button>
                 </div>
+                <button
+                  onClick={handleExportTransacciones}
+                  disabled={isExporting || !isXLSXLoaded || transacciones.length === 0}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
+                    isExporting || !isXLSXLoaded || transacciones.length === 0
+                        ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                  }`}
+                >
+                  {isExporting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                      </svg>
+                      <span>Generando Excel...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      <span>Exportar a Excel</span>
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={() => handleOpenNewTransactionModal('compra')}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -1471,7 +1561,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                     <option value="">Selecciona un activo</option>
                     {activos.map(activo => (
                       <option key={activo.id} value={activo.id}>
-                        {activo.nombre} ({activo.simbolo})
+                        {activo.simbolo}
                       </option>
                     ))}
                   </select>
