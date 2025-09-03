@@ -527,14 +527,16 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     setIsExporting(true);
 
     try {
+      // ✅ MODIFICADO: Añadir nuevos encabezados para precio de compra y precio actual
       const headers = [
         'Activo',
         'Bróker',
         'Fecha',
         'Nominales',
-        `Precio Unitario (${monedaSeleccionada})`,
+        `Precio de Compra (${monedaSeleccionada})`,
+        `Precio Actual (${monedaSeleccionada})`,
         `Costo Total (${monedaSeleccionada})`,
-        `Valor Actual (${monedaSeleccionada})`,
+        `Valor Actual Total (${monedaSeleccionada})`,
         `Rendimiento (${monedaSeleccionada})`,
         `Rendimiento (%)`
       ];
@@ -543,19 +545,25 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         const costoTransaccion = getTransactionCost(t, monedaSeleccionada);
         const esBonoTransaccion = t.activos?.tipo?.toLowerCase() === 'bono';
         const ultimoPrecio = monedaSeleccionada === 'ARS' ? t.activos.ultimo_precio_ars : t.activos.ultimo_precio;
-        const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio : ultimoPrecio) * t.cantidad / (esBonoTransaccion ? 100 : 1);
+        const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio) * t.cantidad;
         
         const rendimientoMontoTransaccion = valorActualTransaccion - costoTransaccion;
         const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) : 0;
         
         const precioUnitario = getTransactionPrice(t, monedaSeleccionada);
+        // ✅ NUEVO: Lógica para calcular el precio actual unitario
+        const precioActualUnitario = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio);
 
+        // ✅ MODIFICADO: Se agrega el precio de compra y el precio actual
         return [
           { v: `${t.activos.nombre} (${t.activos.simbolo})`, t: 's' },
           { v: getBrokerNameById(t.broker_id), t: 's' },
           { v: formatDate(t.fecha), t: 's' },
           { v: parseFloat(t.cantidad), t: 'n' },
-          { v: parseFloat(precioUnitario), t: 'n', z: '#,##0.00' },
+          // ✅ NUEVO: Agregar precio de compra con formato condicional
+          { v: parseFloat(precioUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
+          // ✅ NUEVO: Agregar precio actual con formato condicional
+          { v: parseFloat(precioActualUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
           { v: parseFloat(costoTransaccion), t: 'n', z: '#,##0.00' },
           { v: parseFloat(valorActualTransaccion), t: 'n', z: '#,##0.00' },
           { v: parseFloat(rendimientoMontoTransaccion), t: 'n', z: '#,##0.00' },
@@ -567,8 +575,10 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       window.XLSX.utils.sheet_add_aoa(ws, [headers]);
       window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
 
+      // ✅ MODIFICADO: Se ajustan los anchos de columna para los nuevos campos
       ws['!cols'] = [
-        { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 20 },
+        { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, 
+        { wch: 25 }, { wch: 25 }, 
         { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }
       ];
 
