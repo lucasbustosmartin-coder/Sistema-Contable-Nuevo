@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 
 // Iconos únicos y uniformes con un grosor de trazo de 1.5
@@ -51,11 +51,6 @@ const icons = {
       <circle cx="12" cy="12" r="9" />
     </svg>
   ),
-  portfolios: (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9v3m18 0v3m-3-3h-3" />
-    </svg>
-  ),
   signOut: (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM9.75 9.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" />
@@ -96,7 +91,6 @@ export default function Sidebar({ currentView, setCurrentView, user }) {
     { name: 'Registrar Nuevo Día', view: 'crear-nuevo-dia', icon: icons.newDay },
     { name: 'Exportar a Excel', view: 'exportar-excel', icon: icons.excelExport },
     { name: 'Precios', view: 'activos', icon: icons.activos },
-    { name: 'Portfolios', view: 'portfolios', icon: icons.portfolios },
   ];
 
   return (
@@ -119,8 +113,7 @@ export default function Sidebar({ currentView, setCurrentView, user }) {
               flex items-center space-x-3
               ${currentView === item.view ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-700'}
             `}
-            // ✅ CORRECCIÓN: Llamamos a la función de prop con el tipo de vista
-            onClick={() => setCurrentView(item.view)}
+            onClick={() => setCurrentView && setCurrentView(item.view)}
           >
             <div className={`flex-shrink-0 ${currentView === item.view ? 'text-indigo-600' : 'text-gray-500'}`}>{item.icon}</div>
             {!isCollapsed && <span className="text-sm font-medium">{item.name}</span>}

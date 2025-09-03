@@ -1,33 +1,54 @@
-import { useState, useEffect } from 'react'
-import { supabase } from './services/supabase'
-import Login from './components/Login'
-import Dashboard from './components/Dashboard'
-import EstadosFinancierosManager from './components/EstadosFinancierosManager'
-import TipoCambioManager from './components/TipoCambioManager'
-import RubrosManager from './components/RubrosManager'
-import ConceptosContablesManager from './components/ConceptosContablesManager'
-import EntradasContablesManager from './components/EntradasContablesManager'
-import CreateNewDayManager from './components/CreateNewDayManager'
-import ExcelExporterManager from './components/ExcelExporterManager'
-import ActivosManager from './components/ActivosManager' // ✅ Importación del nuevo componente
+import { useState, useEffect } from 'react';
+import { supabase } from './services/supabase';
+import Login from './components/Login';
+import Dashboard from './components/Dashboard';
+import EstadosFinancierosManager from './components/EstadosFinancierosManager';
+import TipoCambioManager from './components/TipoCambioManager';
+import RubrosManager from './components/RubrosManager';
+import ConceptosContablesManager from './components/ConceptosContablesManager';
+import EntradasContablesManager from './components/EntradasContablesManager';
+import CreateNewDayManager from './components/CreateNewDayManager';
+import ExcelExporterManager from './components/ExcelExporterManager';
+import ActivosManager from './components/ActivosManager';
+import Portfolios from './components/portfolios/Portfolios';
+import PortfolioDetail from './components/portfolios/PortfolioDetail';
+import Sidebar from './components/Sidebar';
 
 export default function App() {
-  const [user, setUser] = useState(null)
-  const [currentView, setCurrentView] = useState('dashboard')
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null);
+  const [currentView, setCurrentView] = useState({ type: 'dashboard' });
+  const [loading, setLoading] = useState(true);
+  const [updateMessage, setUpdateMessage] = useState(null);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange( // ✅ Corregido aquí
-      (event, session) => {
-        setUser(session?.user || null)
-        setLoading(false)
-      }
-    )
-
-    return () => {
-      subscription.unsubscribe()
+    async function getSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+      setLoading(false);
     }
-  }, [])
+    getSession();
+  }, []);
+
+  const handleActualizarPrecios = async () => {
+    setUpdateMessage({ type: 'info', text: 'Actualizando precios...' });
+    try {
+      if (!user) {
+        throw new Error('Usuario no autenticado.');
+      }
+      const { data, error: invokeError } = await supabase.functions.invoke('actualizar-precios-docta', {
+        body: { user_id: user.id },
+      });
+      if (invokeError) throw invokeError;
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setUpdateMessage({ type: 'success', text: data?.message || 'Precios actualizados correctamente.' });
+    } catch (err) {
+      console.error('Error al actualizar precios:', err);
+      setUpdateMessage({ type: 'error', text: err.message || 'Error al actualizar precios.' });
+    } finally {
+      setTimeout(() => setUpdateMessage(null), 5000);
+    }
+  };
 
   if (loading) {
     return (
@@ -37,33 +58,74 @@ export default function App() {
           Cargando...
         </div>
       </div>
-    )
+    );
   }
 
   if (!user) {
-    return <Login onLogin={() => {}} />
+    return <Login onLogin={() => {}} />;
+  }
+  
+  // ✅ CORRECCIÓN: Unificamos la lógica de navegación y actualización
+  const handleViewChange = (viewType, portfolioId = null, selectedCurrency = 'ARS') => {
+    const newView = { type: viewType, portfolioId, selectedCurrency };
+    setCurrentView(newView);
+
+    if (viewType === 'portfolios') {
+      handleActualizarPrecios();
+    }
+  };
+  
+  let currentComponent;
+  switch (currentView.type) {
+    case 'dashboard':
+      currentComponent = <Dashboard user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'estados-financieros':
+      currentComponent = <EstadosFinancierosManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'tipo-cambio':
+      currentComponent = <TipoCambioManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'rubros':
+      currentComponent = <RubrosManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'conceptos':
+      currentComponent = <ConceptosContablesManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'entradas-contables':
+      currentComponent = <EntradasContablesManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'crear-nuevo-dia':
+      currentComponent = <CreateNewDayManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'exportar-excel':
+      currentComponent = <ExcelExporterManager user={user} setCurrentView={handleViewChange} />;
+      break;
+    case 'activos':
+      currentComponent = <ActivosManager user={user} setCurrentView={handleViewChange} updateMessage={updateMessage} setUpdateMessage={setUpdateMessage} />;
+      break;
+    case 'portfolios':
+      // ✅ Pasamos la moneda seleccionada para que el estado se actualice
+      currentComponent = <Portfolios user={user} setCurrentView={handleViewChange} updateMessage={updateMessage} setUpdateMessage={setUpdateMessage} />;
+      break;
+    case 'portfolio-detail':
+      // ✅ Pasamos la moneda del estado a la prop del componente
+      currentComponent = <PortfolioDetail user={user} setCurrentView={handleViewChange} portfolioId={currentView.portfolioId} selectedCurrency={currentView.selectedCurrency} />;
+      break;
+    default:
+      currentComponent = <Dashboard user={user} setCurrentView={handleViewChange} />;
   }
 
-  switch (currentView) {
-    case 'dashboard':
-      return <Dashboard user={user} setCurrentView={setCurrentView} />
-    case 'estados-financieros':
-      return <EstadosFinancierosManager user={user} setCurrentView={setCurrentView} />
-    case 'tipo-cambio':
-      return <TipoCambioManager user={user} setCurrentView={setCurrentView} />
-    case 'rubros':
-      return <RubrosManager user={user} setCurrentView={setCurrentView} />
-    case 'conceptos':
-      return <ConceptosContablesManager user={user} setCurrentView={setCurrentView} />
-    case 'entradas-contables':
-      return <EntradasContablesManager user={user} setCurrentView={setCurrentView} />
-    case 'crear-nuevo-dia':
-      return <CreateNewDayManager user={user} setCurrentView={setCurrentView} />
-    case 'exportar-excel':
-      return <ExcelExporterManager user={user} setCurrentView={setCurrentView} />
-    case 'activos': // ✅ Nuevo caso
-      return <ActivosManager user={user} setCurrentView={setCurrentView} />
-    default:
-      return <Dashboard user={user} setCurrentView={setCurrentView} />
-  }
+  return (
+    <div className="flex h-screen bg-gray-100 font-sans">
+      <Sidebar
+        currentView={currentView.type}
+        setCurrentView={handleViewChange}
+        user={user}
+      />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {currentComponent}
+      </div>
+    </div>
+  );
 }

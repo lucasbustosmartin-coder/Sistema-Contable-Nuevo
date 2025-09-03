@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import Sidebar from './Sidebar';
 import iconImage from '../assets/icon.png';
 
 export default function ExcelExporterManager({ user, setCurrentView }) {
@@ -8,9 +7,16 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
   const [tiposCambio, setTiposCambio] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [fechaDesde, setFechaDesde] = useState('');
-  const [fechaHasta, setFechaHasta] = useState('');
+  
+  const today = new Date();
+  const lastMonth = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  lastMonth.setMonth(lastMonth.getMonth() - 1);
+  const formatDate = (date) => date.toISOString().split('T')[0];
+  const [fechaDesde, setFechaDesde] = useState(formatDate(lastMonth));
+  const [fechaHasta, setFechaHasta] = useState(formatDate(today));
+
   const [isXLSXLoaded, setIsXLSXLoaded] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // ✅ NUEVO: Estado para controlar la exportación
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -24,6 +30,10 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
 
     return () => document.head.removeChild(script);
   }, []);
+
+  useEffect(() => {
+    handleVer();
+  }, [user, fechaDesde, fechaHasta]);
 
   const handleVer = async () => {
     setLoading(true);
@@ -90,7 +100,7 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
     }
   };
 
-  const handleExportarVista = () => {
+  const handleExportarVista = async () => { // ✅ MODIFICADO: Ahora es una función asíncrona
     if (!isXLSXLoaded) {
       alert('La librería de exportación a Excel aún no ha cargado.');
       return;
@@ -101,59 +111,67 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
       return;
     }
 
-    const headers = [
-      'Fecha',
-      'Rubro',
-      'Concepto',
-      'Moneda',
-      'Valor ARS',
-      'Valor USD',
-      'Tipo de Cambio (ARS/USD)'
-    ];
+    setIsExporting(true); // ✅ Establecer isExporting a true al inicio
 
-    const dataToExport = data.map(entry => {
-      const fechaFormatted = new Date(entry.fecha + 'T00:00:00').toLocaleDateString('es-AR');
-      const tasa = tiposCambio[entry.fecha];
-
-      return [
-        { v: fechaFormatted, t: 's' },
-        { v: entry.conceptos_contables?.rubros?.nombre || '', t: 's' },
-        { v: entry.conceptos_contables?.concepto || '', t: 's' },
-        { v: entry.moneda, t: 's' },
-        { v: parseFloat(entry.importe_ars), t: 'n', z: '#,##0.00' },
-        { v: parseFloat(entry.importe_usd), t: 'n', z: '#,##0.00' },
-        { v: typeof tasa === 'number' ? tasa : null, t: 'n', z: '#,##0.00' }
+    try {
+      const headers = [
+        'Fecha',
+        'Rubro',
+        'Concepto',
+        'Moneda',
+        'Valor ARS',
+        'Valor USD',
+        'Tipo de Cambio (ARS/USD)'
       ];
-    });
 
-    const ws = window.XLSX.utils.aoa_to_sheet([]);
-    window.XLSX.utils.sheet_add_aoa(ws, [headers]);
-    window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+      const dataToExport = data.map(entry => {
+        const fechaFormatted = new Date(entry.fecha + 'T00:00:00').toLocaleDateString('es-AR');
+        const tasa = tiposCambio[entry.fecha] ?? 'N/A';
 
-    ws['!cols'] = [
-      { wch: 12 },
-      { wch: 20 },
-      { wch: 25 },
-      { wch: 10 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 18 }
-    ];
+        return [
+          { v: fechaFormatted, t: 's' },
+          { v: entry.conceptos_contables?.rubros?.nombre || '', t: 's' },
+          { v: entry.conceptos_contables?.concepto || '', t: 's' },
+          { v: entry.moneda, t: 's' },
+          { v: parseFloat(entry.importe_ars), t: 'n', z: '#,##0.00' },
+          { v: parseFloat(entry.importe_usd), t: 'n', z: '#,##0.00' },
+          { v: typeof tasa === 'number' ? tasa : null, t: 'n', z: '#,##0.00' }
+        ];
+      });
 
-    const wb = window.XLSX.utils.book_new();
-    window.XLSX.utils.book_append_sheet(wb, ws, "Registros");
-    
-    const filename = `Registros_${new Date().toISOString().split('T')[0]}.xlsx`;
-    window.XLSX.writeFile(wb, filename);
+      const ws = window.XLSX.utils.aoa_to_sheet([]);
+      window.XLSX.utils.sheet_add_aoa(ws, [headers]);
+      window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+
+      ws['!cols'] = [
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 25 },
+        { wch: 10 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 18 }
+      ];
+
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Registros");
+      
+      const filename = `Registros_${new Date().toISOString().split('T')[0]}.xlsx`;
+      window.XLSX.writeFile(wb, filename);
+
+    } catch (err) {
+      console.error("Error al exportar a Excel:", err);
+      alert("Error al exportar a Excel. Inténtalo de nuevo.");
+    } finally {
+      // ✅ Pequeño retraso para que el spinner sea visible
+      await new Promise(resolve => setTimeout(resolve, 100)); 
+      setIsExporting(false); // ✅ Restablecer isExporting a false
+    }
   };
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
-      <Sidebar
-        currentView="excel-export"
-        setCurrentView={setCurrentView}
-        user={user}
-      />
+ 
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm p-6">
@@ -195,14 +213,24 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
                   </button>
                   <button
                     onClick={handleExportarVista}
-                    disabled={!isXLSXLoaded || data.length === 0}
-                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 ${
-                      !isXLSXLoaded || data.length === 0
+                    disabled={!isXLSXLoaded || data.length === 0 || isExporting} // ✅ Deshabilitar durante la exportación
+                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center justify-center space-x-2 ${ // ✅ Ajustes para spinner
+                      !isXLSXLoaded || data.length === 0 || isExporting
                         ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
-                    {isXLSXLoaded ? 'Exportar vista' : 'Cargando...'}
+                    {isExporting ? ( // ✅ Renderizado condicional
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                        </svg>
+                        <span>Generando Excel...</span>
+                      </>
+                    ) : (
+                      <span>{isXLSXLoaded ? 'Exportar vista' : 'Cargando...'}</span>
+                    )}
                   </button>
                 </div>
               </div>

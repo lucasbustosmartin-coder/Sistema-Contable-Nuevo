@@ -1,3 +1,9 @@
 {
-  "imports": {}
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "imports": {
+    "https://esm.sh/@supabase/supabase-js@2.44.2": "https://esm.sh/v135/@supabase/supabase-js@2.44.2/dist/module/index.js"
+  }
 }

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import Sidebar from './Sidebar';
 import iconImage from '../assets/icon.png';
 
 export default function ConceptosContablesManager({ user, setCurrentView }) {
@@ -147,11 +146,7 @@ export default function ConceptosContablesManager({ user, setCurrentView }) {
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
-      <Sidebar
-        currentView="conceptos"
-        setCurrentView={setCurrentView}
-        user={user}
-      />
+   
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm p-6">

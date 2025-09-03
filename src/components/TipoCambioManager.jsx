@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import Sidebar from './Sidebar';
 import iconImage from '../assets/icon.png';
 
 export default function TipoCambioManager({ user, setCurrentView }) {
@@ -13,20 +12,57 @@ export default function TipoCambioManager({ user, setCurrentView }) {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ fecha: '', tasa: '' });
   const [formError, setFormError] = useState('');
-  const [showRecalculateModal, setShowRecalculateModal] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState(null);
-
-  const tipos = ['accion', 'cedear', 'etf', 'bono'];
-  const monedas = ['ARS', 'USD'];
+  
+  const [filterDate, setFilterDate] = useState('');
+  const [isAutomating, setIsAutomating] = useState(true);
 
   useEffect(() => {
     if (!user) {
       setLoading(false);
       return;
     }
-    loadTipoCambio();
-  }, [user]);
+
+    const runAutomatedProcess = async () => {
+      setLoading(true);
+      setError(null);
+      setUpdateMessage({ type: 'info', text: 'Iniciando proceso automático: Actualizando valor del dólar...' });
+      
+      try {
+        const { data: invokeData, error: invokeError } = await supabase.functions.invoke('actualizar-tipo-cambio', {
+          body: { user_id: user.id },
+        });
+
+        if (invokeError) throw new Error(invokeError.message || 'Error al actualizar el tipo de cambio.');
+
+        setUpdateMessage({ type: 'success', text: 'Iniciando recálculo automático de registros contables...' });
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        await handleRecalculate();
+        setUpdateMessage({ type: 'success', text: 'Proceso automático finalizado. Tabla actualizada.' });
+        
+      } catch (err) {
+        console.error('❌ Error en el proceso automático:', err.message);
+        setUpdateMessage({ type: 'error', text: `Error en el proceso automático: ${err.message}` });
+      } finally {
+        setIsAutomating(false);
+        setLoading(false);
+        loadTipoCambio();
+        setTimeout(() => setUpdateMessage(null), 5000);
+      }
+    };
+
+    if (isAutomating) {
+      runAutomatedProcess();
+    }
+  }, [user, isAutomating]);
+
+  useEffect(() => {
+    if (user && !isAutomating) {
+      loadTipoCambio();
+    }
+  }, [user, filterDate, isAutomating]);
 
   const loadTipoCambio = async () => {
     if (!user) {
@@ -37,12 +73,17 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     try {
       setLoading(true);
       setError(null);
-
-      const { data: tipos, error: fetchError } = await supabase
+      
+      let query = supabase
         .from('tipos_cambio')
         .select('*')
-        .eq('usuario_id', user.id)
-        .order('fecha', { ascending: false });
+        .eq('usuario_id', user.id);
+      
+      if (filterDate) {
+        query = query.eq('fecha', filterDate);
+      }
+
+      const { data: tipos, error: fetchError } = await query.order('fecha', { ascending: false });
 
       if (fetchError) throw fetchError;
 
@@ -83,14 +124,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
   const closeDeleteModal = () => {
     setItemToDelete(null);
     setShowDeleteModal(false);
-  };
-  
-  const openRecalculateModal = () => {
-    setShowRecalculateModal(true);
-  };
-  
-  const closeRecalculateModal = () => {
-    setShowRecalculateModal(false);
   };
 
   const handleInputChange = (e) => {
@@ -169,17 +202,8 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     }
   };
   
-  // ✅ CORRECCIÓN: Lógica para abrir el modal de recálculo
-  const handleRecalcularTodosLosRegistros = () => {
-    setShowRecalculateModal(true);
-  };
-  
-  const confirmRecalculate = async () => {
-    closeRecalculateModal();
+  const handleRecalculate = async () => {
     try {
-      setLoading(true);
-      setError(null);
-
       if (!user) {
         setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
         return;
@@ -193,7 +217,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       if (tcError) throw tcError;
 
       if (!tipos || tipos.length === 0) {
-        setUpdateMessage({ type: 'error', text: 'No hay tipos de cambio cargados.' });
+        setUpdateMessage({ type: 'success', text: 'No hay tipos de cambio cargados.' });
         return;
       }
 
@@ -210,7 +234,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       if (entradasError) throw entradasError;
 
       if (!entradas || entradas.length === 0) {
-        setUpdateMessage({ type: 'error', text: 'No hay entradas contables para recalcular.' });
+        setUpdateMessage({ type: 'success', text: 'No hay entradas contables para recalcular.' });
         return;
       }
 
@@ -220,27 +244,36 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         const tasa = tiposPorFecha[entrada.fecha];
         if (!tasa || tasa <= 0) return;
 
-        let nuevoARS, nuevoUSD;
+        let debeActualizar = false;
+        let updateData = {};
 
         if (entrada.moneda === 'ARS') {
-          nuevoARS = entrada.importe_ars;
-          nuevoUSD = Math.round((entrada.importe_ars / tasa) * 100) / 100;
-        } else {
-          nuevoUSD = entrada.importe_usd;
-          nuevoARS = Math.round((entrada.importe_usd * tasa) * 100) / 100;
+          const nuevoUSD = parseFloat((entrada.importe_ars / tasa).toFixed(2));
+          if (nuevoUSD !== entrada.importe_usd) {
+            debeActualizar = true;
+            updateData = { importe_usd: nuevoUSD };
+          }
+        } else if (entrada.moneda === 'USD') {
+          const nuevoARS = parseFloat((entrada.importe_usd * tasa).toFixed(2));
+          if (nuevoARS !== entrada.importe_ars) {
+            debeActualizar = true;
+            updateData = { importe_ars: nuevoARS };
+          }
         }
         
-        actualizaciones.push(
-          supabase
-            .from('entradas_contables')
-            .update({ importe_ars: nuevoARS, importe_usd: nuevoUSD })
-            .eq('id', entrada.id)
-            .eq('usuario_id', user.id)
-        );
+        if (debeActualizar) {
+          actualizaciones.push(
+            supabase
+              .from('entradas_contables')
+              .update(updateData)
+              .eq('id', entrada.id)
+              .eq('usuario_id', user.id)
+          );
+        }
       });
 
       if (actualizaciones.length === 0) {
-        setUpdateMessage({ type: 'error', text: 'No hay registros para recalcular.' });
+        setUpdateMessage({ type: 'success', text: 'No se encontraron registros para recalcular. Ya están actualizados.' });
         return;
       }
 
@@ -252,46 +285,16 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         throw new Error('Algunos registros no se pudieron actualizar.');
       }
       
-      setUpdateMessage({ type: 'success', text: `¡Recálculo masivo completado! ${actualizaciones.length} registros actualizados.` });
+      setUpdateMessage({ type: 'success', text: `Recálculo masivo completado: ${actualizaciones.length} registros actualizados.` });
     } catch (err) {
       console.error('Error al recalcular:', err.message);
       setUpdateMessage({ type: 'error', text: 'Error al recalcular. Intenta nuevamente.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleActualizarTipoCambio = async () => {
-    setIsUpdating(true);
-    try {
-      if (!user) {
-        setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
-        return;
-      }
-      
-      const { data, error: invokeError } = await supabase.functions.invoke('actualizar-tipo-cambio', {
-        body: { user_id: user.id },
-      });
-      
-      if (invokeError) throw invokeError;
-      
-      await loadTipoCambio();
-      setUpdateMessage({ type: 'success', text: data?.message || 'Tipo de cambio actualizado correctamente.' });
-    } catch (err) {
-      console.error('Error al actualizar tipo de cambio:', err);
-      setUpdateMessage({ type: 'error', text: 'Error al actualizar el tipo de cambio. Revisa la consola.' });
-    } finally {
-      setIsUpdating(false);
     }
   };
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
-      <Sidebar
-        currentView="tipo-cambio"
-        setCurrentView={setCurrentView}
-        user={user}
-      />
+  
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm p-6">
@@ -314,18 +317,27 @@ export default function TipoCambioManager({ user, setCurrentView }) {
             </div>
           ) : (
             <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
-              <div className="p-6 flex justify-between items-center">
+              <div className="p-6 flex justify-between items-center flex-wrap gap-4">
                 <h3 className="text-lg font-semibold text-gray-800">Registros de Tipo de Cambio</h3>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handleRecalcularTodosLosRegistros}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a2.252 2.252 0 0 0 1.588.662 2.252 2.252 0 0 0 1.588-.662l3.181-3.183m0 0v4.991m0-4.991a2.252 2.252 0 0 1 1.588-.662 2.252 2.252 0 0 1 1.588.662l3.181 3.183a2.252 2.252 0 0 1 1.588.662 2.252 2.252 0 0 1 1.588-.662l3.181-3.183" />
-                    </svg>
-                    <span>Recalcular registros</span>
-                  </button>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2">
+                    <label htmlFor="filter-date" className="text-sm text-gray-600 font-medium">Filtrar por Fecha:</label>
+                    <input
+                      id="filter-date"
+                      type="date"
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                    {filterDate && (
+                      <button
+                        onClick={() => setFilterDate('')}
+                        className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
                   <button 
                     onClick={() => openModal()}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
@@ -336,22 +348,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
                     <span>Nuevo Registro</span>
                   </button>
                 </div>
-              </div>
-
-              <div className="p-6 flex justify-end">
-                <button
-                  onClick={handleActualizarTipoCambio}
-                  disabled={isUpdating}
-                  className={`bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 ${
-                    isUpdating ? 'opacity-70 cursor-not-allowed' : ''
-                  }`}
-                >
-                  <svg className={`animate-spin h-5 w-5 ${isUpdating ? '' : 'hidden'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
-                  </svg>
-                  <span>{isUpdating ? 'Actualizando...' : 'Actualizar Valor Online'}</span>
-                </button>
               </div>
 
               <div className="overflow-x-auto">
@@ -388,7 +384,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
                     ) : (
                       <tr>
                         <td colSpan="3" className="px-6 py-4 text-center text-gray-500">
-                          No hay registros de tipo de cambio.
+                          {filterDate ? `No hay registros para la fecha ${filterDate}.` : 'No hay registros de tipo de cambio.'}
                         </td>
                       </tr>
                     )}
@@ -400,7 +396,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         </main>
       </div>
 
-      {/* Modals */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
@@ -493,49 +488,19 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         </div>
       )}
 
-      {showRecalculateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-auto">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirmar Recálculo</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Esta acción actualizará **todos** los registros contables con los tipos de cambio actuales. ¿Estás seguro de que quieres continuar?
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={closeRecalculateModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmRecalculate}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-150"
-              >
-                Recalcular
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {updateMessage && (
-        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4`}>
-          <div className={`rounded-lg p-6 w-full max-w-sm mx-auto text-center shadow-md transition-all duration-300 ${
-            updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
-          }`}>
-            <p className="font-semibold mb-2">{updateMessage.type === 'success' ? 'Éxito' : 'Error'}</p>
-            <p className="text-sm mb-4">{updateMessage.text}</p>
-            <button
-              onClick={() => setUpdateMessage(null)}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
-                updateMessage.type === 'success' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-600 text-white hover:bg-red-700'
-              }`}
-            >
-              Cerrar
-            </button>
-          </div>
+        <div className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 shadow-lg transition-all duration-300 ${
+          updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border-b border-green-200' : 'bg-red-100 text-red-700 border-b border-red-200'
+        }`}>
+          <p className="text-sm font-medium">
+            {updateMessage.text}
+          </p>
+          <button
+            onClick={() => setUpdateMessage(null)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

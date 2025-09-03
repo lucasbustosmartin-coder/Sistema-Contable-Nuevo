@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import Sidebar from './Sidebar';
+import iconImage from '../assets/icon.png';
 
 export default function ActivosManager({ user, setCurrentView }) {
   const [activos, setActivos] = useState([]);
@@ -20,16 +20,18 @@ export default function ActivosManager({ user, setCurrentView }) {
   const [formError, setFormError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState(null);
+  const [tipoCambioDisplay, setTipoCambioDisplay] = useState(null);
+
 
   const tipos = ['accion', 'cedear', 'etf', 'bono'];
   const monedas = ['ARS', 'USD'];
 
   useEffect(() => {
     loadActivos();
+    loadLatestTipoCambio();
   }, [user]);
 
   const loadActivos = async () => {
-    // ✅ CORRECCIÓN 1: Se agregó una comprobación para evitar el error si 'user' no está definido
     if (!user) {
       setLoading(false);
       return;
@@ -38,12 +40,12 @@ export default function ActivosManager({ user, setCurrentView }) {
     try {
       setLoading(true);
       setError(null);
-      // ✅ Se asegura de seleccionar las columnas de precios para que se muestren
       const { data, error: fetchError } = await supabase
         .from('activos')
         .select('*, ultimo_precio, ultimo_precio_ars, fecha_actualizacion')
         .eq('usuario_id', user.id)
-        .order('nombre', { ascending: true });
+        .order('tipo', { ascending: true })
+        .order('simbolo', { ascending: true });
 
       if (fetchError) throw fetchError;
       setActivos(data || []);
@@ -52,6 +54,23 @@ export default function ActivosManager({ user, setCurrentView }) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLatestTipoCambio = async () => {
+    if (!user) return;
+    try {
+      const { data: tcData } = await supabase
+        .from('tipos_cambio')
+        .select('tasa')
+        .eq('usuario_id', user.id)
+        .order('fecha', { ascending: false })
+        .limit(1)
+        .single();
+      
+      setTipoCambioDisplay(tcData?.tasa || null);
+    } catch (err) {
+      console.error('Error al cargar tipo de cambio:', err.message);
     }
   };
 
@@ -127,9 +146,13 @@ export default function ActivosManager({ user, setCurrentView }) {
 
       await loadActivos();
       closeModal();
+      setUpdateMessage({ type: 'success', text: editing ? 'Activo actualizado con éxito.' : 'Activo creado con éxito.' });
     } catch (err) {
       console.error('Error al guardar el activo:', err.message);
       setFormError('Error al guardar. Intenta nuevamente.');
+      setUpdateMessage({ type: 'error', text: 'Error al guardar el activo.' });
+    } finally {
+      setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
 
@@ -146,99 +169,50 @@ export default function ActivosManager({ user, setCurrentView }) {
 
       await loadActivos();
       closeDeleteModal();
+      setUpdateMessage({ type: 'success', text: 'Activo eliminado con éxito.' });
     } catch (err) {
       console.error('Error al eliminar el activo:', err.message);
       setError('Error al eliminar. Intenta nuevamente.');
+      setUpdateMessage({ type: 'error', text: 'Error al eliminar el activo.' });
       closeDeleteModal();
+    } finally {
+      setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
 
-  // ✅ CORRECCIÓN 2: Lógica de actualización de precios integrada
   const handleActualizarPrecios = async () => {
     setIsUpdating(true);
-    const DOCTA_API_URL = "https://www.doctacapital.com.ar/api/series?fromDate=2025-08-29T03%3A00%3A00.000Z&adjusted=false&markets=stock.bond.cedear&tickers=all&columns=date.ticker.last_price.closing_price.opening_price.low_price.high_price&format=csv&token=b9185669-9246-44ff-841c-2026baa88941";
-    
+    setUpdateMessage(null);
     try {
       if (!user) {
         setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
         return;
       }
-
-      const { data: activosUsuario, error: fetchActivosError } = await supabase
-        .from('activos')
-        .select('id, simbolo, moneda')
-        .eq('usuario_id', user.id);
-
-      if (fetchActivosError) throw fetchActivosError;
-
-      const simbolos = activosUsuario.map(a => a.simbolo);
-
-      const response = await fetch(DOCTA_API_URL + "&t=" + new Date().getTime());
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       
-      const csvData = await response.text();
-      const priceData = parseCSV(csvData);
-
-      const priceMap = {};
-      priceData.forEach(item => {
-        if (simbolos.includes(item.ticker) && item.last_price) {
-          priceMap[item.ticker] = parseFloat(item.last_price);
-        }
+      const { data, error: invokeError } = await supabase.functions.invoke('actualizar-precios-docta', {
+        body: { user_id: user.id },
       });
       
-      const { data: tcData } = await supabase
-        .from('tipos_cambio')
-        .select('tasa')
-        .eq('fecha', new Date().toISOString().split('T')[0])
-        .single();
-      const tipoCambio = tcData?.tasa || 1100;
+      if (invokeError) throw invokeError;
       
-      for (const activo of activosUsuario) {
-        const precioUsd = priceMap[activo.simbolo];
-        if (precioUsd !== undefined) {
-          const precioArs = activo.moneda === 'USD' ? precioUsd * tipoCambio : precioUsd;
-          
-          await supabase
-            .from('activos')
-            .update({
-              ultimo_precio: precioUsd,
-              ultimo_precio_ars: precioArs,
-              fecha_actualizacion: new Date().toISOString(),
-            })
-            .eq('id', activo.id);
-        }
-      }
-      
-      function parseCSV(csvText) {
-        const fixedText = csvText.replace(/'(\d{4}-\d{2}-\d{2})/g, '\n$1');
-        const lines = fixedText.trim().split("\n");
-        const headers = lines[0].split(",");
-        const data = [];
-        for (let i = 1; i < lines.length; i++) {
-          if (!lines[i].trim()) continue;
-          const row = lines[i].split(",");
-          const item = {};
-          headers.forEach((header, index) => {
-            item[header] = row[index]?.replace(/^"(.*)"$/, "$1") || "";
-          });
-          data.push(item);
-        }
-        return data;
-      }
-      
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo para asegurar la sincronización
+
       await loadActivos();
-      setUpdateMessage({ type: 'success', text: 'Precios actualizados correctamente.' });
+      await loadLatestTipoCambio();
+
+      setUpdateMessage({ type: 'success', text: data?.message || 'Precios actualizados correctamente.' });
       
     } catch (err) {
       console.error('Error al actualizar precios:', err);
       setUpdateMessage({ type: 'error', text: 'Error al actualizar precios. Por favor, revisa la consola.' });
     } finally {
       setIsUpdating(false);
+      setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <div className="flex h-screen bg-gray-100 font-sans">
       <Sidebar
         currentView="activos"
         setCurrentView={setCurrentView}
@@ -246,22 +220,12 @@ export default function ActivosManager({ user, setCurrentView }) {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-semibold text-gray-800">Mis Activos</h2>
-            <button
-              onClick={handleActualizarPrecios}
-              disabled={isUpdating}
-              className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 ${
-                isUpdating ? 'opacity-70 cursor-not-allowed' : ''
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a2.252 2.252 0 0 0 1.588.662 2.252 2.252 0 0 0 1.588-.662l3.181-3.183m0 0v4.991m0-4.991a2.252 2.252 0 0 1 1.588-.662 2.252 2.252 0 0 1 1.588.662l3.181 3.183a2.252 2.252 0 0 1 1.588.662 2.252 2.252 0 0 1 1.588-.662l3.181-3.183" />
-              </svg>
-              <span>{isUpdating ? 'Actualizando...' : 'Actualizar Precios'}</span>
-            </button>
+        <header className="bg-white shadow-sm p-6">
+          <div className="flex items-center space-x-4 mb-2">
+            <img src={iconImage} alt="Gestión Patrimonial Icono" className="h-8 w-8 object-contain" />
+            <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
           </div>
+          <h2 className="text-2xl font-semibold text-gray-800">Precios</h2>
         </header>
 
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
@@ -275,26 +239,53 @@ export default function ActivosManager({ user, setCurrentView }) {
               <p className="text-sm">Detalles: <span className="font-mono text-red-800">{error}</span></p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+              <div className="px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
                 <h3 className="text-lg font-semibold text-gray-800">Lista de Activos</h3>
-                <button
-                  onClick={() => openModal()}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
-                >
-                  Nuevo Activo
-                </button>
+                <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                  {tipoCambioDisplay && (
+                    <span className="text-sm text-gray-600 font-medium whitespace-nowrap">
+                      T.C. actual: <span className="font-mono font-semibold">${tipoCambioDisplay?.toFixed(2)}</span>
+                    </span>
+                  )}
+                  <div className="flex flex-col items-end space-y-2">
+                    <button
+                      onClick={handleActualizarPrecios}
+                      disabled={isUpdating}
+                      className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 ${
+                        isUpdating ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <svg className={`animate-spin h-5 w-5 ${isUpdating ? '' : 'hidden'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                      </svg>
+                      <span>{isUpdating ? 'Actualizando...' : 'Actualizar Precios'}</span>
+                    </button>
+                    {isUpdating && <p className="text-sm text-gray-500 italic mt-2">Actualizando precios...</p>}
+                  </div>
+                  
+                  <button
+                    onClick={() => openModal()}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span>Nuevo Activo</span>
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Símbolo</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Moneda</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Actual</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Símbolo</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio USD</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio ARS</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Actualización</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
@@ -302,19 +293,16 @@ export default function ActivosManager({ user, setCurrentView }) {
                     {activos.length > 0 ? (
                       activos.map((activo) => (
                         <tr key={activo.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{activo.nombre}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{activo.simbolo}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">{activo.tipo}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{activo.moneda}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{activo.simbolo}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {activo.ultimo_precio_ars ? (
-                              <div>
-                                <div>USD: ${activo.ultimo_precio?.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
-                                <div className="font-medium">ARS: ${activo.ultimo_precio_ars.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">Sin datos</span>
-                            )}
+                            {activo.ultimo_precio ? `$${activo.ultimo_precio?.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : <span className="text-gray-400">Sin datos</span>}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">
+                            {activo.ultimo_precio_ars ? `$${activo.ultimo_precio_ars?.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : <span className="text-gray-400">Sin datos</span>}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {activo.fecha_actualizacion ? new Date(activo.fecha_actualizacion).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <button
@@ -474,23 +462,20 @@ export default function ActivosManager({ user, setCurrentView }) {
         </div>
       )}
 
-      {/* Modal de mensajes */}
+      {/* MODIFICADO: Ahora es una barra de notificación en la parte superior */}
       {updateMessage && (
-        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4`}>
-          <div className={`rounded-lg p-6 w-full max-w-sm mx-auto text-center shadow-lg transition-all duration-300 ${
-            updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
-          }`}>
-            <p className="font-semibold mb-2">{updateMessage.type === 'success' ? 'Éxito' : 'Error'}</p>
-            <p className="text-sm mb-4">{updateMessage.text}</p>
-            <button
-              onClick={() => setUpdateMessage(null)}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
-                updateMessage.type === 'success' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-600 text-white hover:bg-red-700'
-              }`}
-            >
-              Cerrar
-            </button>
-          </div>
+        <div className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 shadow-lg transition-all duration-300 ${
+          updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border-b border-green-200' : 'bg-red-100 text-red-700 border-b border-red-200'
+        }`}>
+          <p className="text-sm font-medium">
+            {updateMessage.text}
+          </p>
+          <button
+            onClick={() => setUpdateMessage(null)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

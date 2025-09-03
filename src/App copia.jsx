@@ -9,23 +9,22 @@ import ConceptosContablesManager from './components/ConceptosContablesManager'
 import EntradasContablesManager from './components/EntradasContablesManager'
 import CreateNewDayManager from './components/CreateNewDayManager'
 import ExcelExporterManager from './components/ExcelExporterManager'
+import ActivosManager from './components/ActivosManager'
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [currentView, setCurrentView] = useState('dashboard')
   const [loading, setLoading] = useState(true)
 
+  // Modificación clave: Obtener la sesión solo al cargar la aplicación
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user || null)
-        setLoading(false)
-      }
-    )
-
-    return () => {
-      subscription.unsubscribe()
+    async function getSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user || null)
+      setLoading(false)
     }
+
+    getSession()
   }, [])
 
   if (loading) {
@@ -46,7 +45,7 @@ export default function App() {
   switch (currentView) {
     case 'dashboard':
       return <Dashboard user={user} setCurrentView={setCurrentView} />
-    case 'estados-financieros': // ✅ Conectado al Sidebar
+    case 'estados-financieros':
       return <EstadosFinancierosManager user={user} setCurrentView={setCurrentView} />
     case 'tipo-cambio':
       return <TipoCambioManager user={user} setCurrentView={setCurrentView} />
@@ -60,6 +59,8 @@ export default function App() {
       return <CreateNewDayManager user={user} setCurrentView={setCurrentView} />
     case 'exportar-excel':
       return <ExcelExporterManager user={user} setCurrentView={setCurrentView} />
+    case 'activos':
+      return <ActivosManager user={user} setCurrentView={setCurrentView} />
     default:
       return <Dashboard user={user} setCurrentView={setCurrentView} />
   }

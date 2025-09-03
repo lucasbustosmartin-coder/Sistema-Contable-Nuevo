@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../services/supabase'
-import Sidebar from './Sidebar'
+
 
 export default function AccountingStates({ user, setCurrentView }) {
   const [entries, setEntries] = useState({})
@@ -55,12 +55,7 @@ export default function AccountingStates({ user, setCurrentView }) {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans">
-      <Sidebar
-        currentView="accounting"
-        setCurrentView={setCurrentView}
-        user={user}
-        onSignOut={handleSignOut}
-      />
+
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">

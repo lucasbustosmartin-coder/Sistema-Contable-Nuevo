@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import Sidebar from './Sidebar';
+import iconImage from '../assets/icon.png';
 
 export default function TipoCambioManager({ user, setCurrentView }) {
   const [tiposCambio, setTiposCambio] = useState([]);
@@ -12,12 +12,9 @@ export default function TipoCambioManager({ user, setCurrentView }) {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ fecha: '', tasa: '' });
   const [formError, setFormError] = useState('');
-  const [showRecalculateModal, setShowRecalculateModal] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState(null);
-
-  const tipos = ['accion', 'cedear', 'etf', 'bono'];
-  const monedas = ['ARS', 'USD'];
 
   useEffect(() => {
     if (!user) {
@@ -82,14 +79,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
   const closeDeleteModal = () => {
     setItemToDelete(null);
     setShowDeleteModal(false);
-  };
-  
-  const openRecalculateModal = () => {
-    setShowRecalculateModal(true);
-  };
-  
-  const closeRecalculateModal = () => {
-    setShowRecalculateModal(false);
   };
 
   const handleInputChange = (e) => {
@@ -168,17 +157,10 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     }
   };
   
-  // ✅ CORRECCIÓN: Lógica para abrir el modal de recálculo
-  const handleRecalcularTodosLosRegistros = async () => {
-    setShowRecalculateModal(true);
-  };
-  
-  const confirmRecalculate = async () => {
-    closeRecalculateModal();
+  const handleRecalculate = async () => {
+    setIsRecalculating(true);
+    setUpdateMessage(null);
     try {
-      setLoading(true);
-      setError(null);
-
       if (!user) {
         setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
         return;
@@ -209,7 +191,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       if (entradasError) throw entradasError;
 
       if (!entradas || entradas.length === 0) {
-        setUpdateMessage({ type: 'error', text: 'No hay entradas contables para recalcular.' });
+        setUpdateMessage({ type: 'success', text: 'No hay entradas contables para recalcular.' });
         return;
       }
 
@@ -220,26 +202,35 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         if (!tasa || tasa <= 0) return;
 
         let nuevoARS, nuevoUSD;
+        let debeActualizar = false;
 
         if (entrada.moneda === 'ARS') {
           nuevoARS = entrada.importe_ars;
-          nuevoUSD = Math.round((entrada.importe_ars / tasa) * 100) / 100;
+          nuevoUSD = parseFloat((entrada.importe_ars / tasa).toFixed(2));
+          if (nuevoUSD !== entrada.importe_usd) {
+            debeActualizar = true;
+          }
         } else {
           nuevoUSD = entrada.importe_usd;
-          nuevoARS = Math.round((entrada.importe_usd * tasa) * 100) / 100;
+          nuevoARS = parseFloat((entrada.importe_usd * tasa).toFixed(2));
+          if (nuevoARS !== entrada.importe_ars) {
+            debeActualizar = true;
+          }
         }
         
-        actualizaciones.push(
-          supabase
-            .from('entradas_contables')
-            .update({ importe_ars: nuevoARS, importe_usd: nuevoUSD })
-            .eq('id', entrada.id)
-            .eq('usuario_id', user.id)
-        );
+        if (debeActualizar) {
+          actualizaciones.push(
+            supabase
+              .from('entradas_contables')
+              .update({ importe_ars: nuevoARS, importe_usd: nuevoUSD })
+              .eq('id', entrada.id)
+              .eq('usuario_id', user.id)
+          );
+        }
       });
 
       if (actualizaciones.length === 0) {
-        setUpdateMessage({ type: 'error', text: 'No hay registros para recalcular.' });
+        setUpdateMessage({ type: 'success', text: 'No se encontraron registros para recalcular. Ya están actualizados.' });
         return;
       }
 
@@ -256,12 +247,14 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       console.error('Error al recalcular:', err.message);
       setUpdateMessage({ type: 'error', text: 'Error al recalcular. Intenta nuevamente.' });
     } finally {
-      setLoading(false);
+      setIsRecalculating(false);
+      setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
 
   const handleActualizarTipoCambio = async () => {
     setIsUpdating(true);
+    setUpdateMessage(null);
     try {
       if (!user) {
         setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
@@ -281,54 +274,24 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       setUpdateMessage({ type: 'error', text: 'Error al actualizar el tipo de cambio. Revisa la consola.' });
     } finally {
       setIsUpdating(false);
+      setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
 
-
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
-      <Sidebar
-        currentView="tipo-cambio"
-        setCurrentView={setCurrentView}
-        user={user}
-      />
+    <div className="flex h-screen bg-gray-100 font-sans">
+  
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-semibold text-gray-800">Tipo de Cambio</h2>
-            <button
-              onClick={handleActualizarTipoCambio}
-              disabled={isUpdating}
-              className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 ${
-                isUpdating ? 'opacity-70 cursor-not-allowed' : ''
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a2.252 2.252 0 0 0 1.588.662 2.252 2.252 0 0 0 1.588-.662l3.181-3.183m0 0v4.991m0-4.991a2.252 2.252 0 0 1 1.588-.662 2.252 2.252 0 0 1 1.588.662l3.181 3.183a2.252 2.252 0 0 1 1.588.662 2.252 2.252 0 0 1 1.588-.662l3.181-3.183" />
-              </svg>
-              <span>{isUpdating ? 'Actualizando...' : 'Actualizar Tipo de Cambio'}</span>
-            </button>
+        <header className="bg-white shadow-sm p-6">
+          <div className="flex items-center space-x-4">
+            <img src={iconImage} alt="Gestión Patrimonial Icono" className="h-8 w-8 object-contain" />
+            <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
           </div>
+          <h2 className="text-2xl font-semibold text-gray-800 mt-4">Tipo de Cambio</h2>
         </header>
         
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
-          {updateMessage && (
-            <div className={`mb-4 rounded-lg p-4 text-center shadow-md transition-all duration-300 ${
-              updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
-            }`}>
-              <p className="font-semibold mb-2">{updateMessage.type === 'success' ? 'Éxito' : 'Error'}</p>
-              <p className="text-sm mb-4">{updateMessage.text}</p>
-              <button
-                onClick={() => setUpdateMessage(null)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
-                  updateMessage.type === 'success' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-600 text-white hover:bg-red-700'
-                }`}
-              >
-                Cerrar
-              </button>
-            </div>
-          )}
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
@@ -339,27 +302,53 @@ export default function TipoCambioManager({ user, setCurrentView }) {
               <p className="text-sm">Detalles: <span className="font-mono text-red-800">{error}</span></p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+              <div className="p-6 flex justify-between items-center flex-wrap gap-4">
                 <h3 className="text-lg font-semibold text-gray-800">Registros de Tipo de Cambio</h3>
-                <button 
-                  onClick={() => openModal()}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
-                >
-                  Nuevo Registro
-                </button>
+                <div className="flex space-x-3">
+                  {/* ✅ MODIFICADO: El botón de Recalcular llama a la nueva función */}
+                  <div className="flex flex-col items-center space-y-2">
+                    <button
+                      onClick={handleRecalculate}
+                      disabled={isRecalculating}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      <svg className={`animate-spin h-5 w-5 ${isRecalculating ? '' : 'hidden'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                      </svg>
+                      <span>Recalcular registros</span>
+                    </button>
+                    {isRecalculating && <p className="text-sm text-gray-500 italic mt-2">Calculando...</p>}
+                  </div>
+
+                  <button 
+                    onClick={() => openModal()}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span>Nuevo Registro</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="px-6 py-4 bg-blue-50 border-b border-gray-200">
+              <div className="px-6 pb-6 flex justify-end flex-col items-end space-y-2">
                 <button
-                  onClick={handleRecalcularTodosLosRegistros}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
+                  onClick={handleActualizarTipoCambio}
+                  disabled={isUpdating}
+                  className={`bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 ${
+                    isUpdating ? 'opacity-70 cursor-not-allowed' : ''
+                  }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a2.252 2.252 0 0 0 1.588.662 2.252 2.252 0 0 0 1.588-.662l3.181-3.183m0 0v4.991m0-4.991a2.252 2.252 0 0 1 1.588-.662 2.252 2.252 0 0 1 1.588.662l3.181 3.183a2.252 2.252 0 0 1 1.588.662 2.252 2.252 0 0 1 1.588-.662l3.181-3.183" />
+                  <svg className={`animate-spin h-5 w-5 ${isUpdating ? '' : 'hidden'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
                   </svg>
-                  <span>Recalcular todos los registros</span>
+                  <span>{isUpdating ? 'Actualizando...' : 'Actualizar Valor Online'}</span>
                 </button>
+                {isUpdating && <p className="text-sm text-gray-500 italic mt-2">Actualizando tipo de cambio...</p>}
               </div>
 
               <div className="overflow-x-auto">
@@ -408,6 +397,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         </main>
       </div>
 
+      {/* Modals para Crear/Editar y Eliminar (mantienen su fondo negro para ser modales) */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
@@ -500,49 +490,20 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         </div>
       )}
 
-      {showRecalculateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-auto">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirmar Recálculo</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Esta acción actualizará **todos** los registros contables con los tipos de cambio actuales. ¿Estás seguro de que quieres continuar?
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={closeRecalculateModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmRecalculate}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-150"
-              >
-                Recalcular
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* ✅ MODIFICADO: Ahora es una barra de notificación en la parte superior */}
       {updateMessage && (
-        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4`}>
-          <div className={`rounded-lg p-6 w-full max-w-sm mx-auto text-center shadow-md transition-all duration-300 ${
-            updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
-          }`}>
-            <p className="font-semibold mb-2">{updateMessage.type === 'success' ? 'Éxito' : 'Error'}</p>
-            <p className="text-sm mb-4">{updateMessage.text}</p>
-            <button
-              onClick={() => setUpdateMessage(null)}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
-                updateMessage.type === 'success' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-600 text-white hover:bg-red-700'
-              }`}
-            >
-              Cerrar
-            </button>
-          </div>
+        <div className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 shadow-lg transition-all duration-300 ${
+          updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border-b border-green-200' : 'bg-red-100 text-red-700 border-b border-red-200'
+        }`}>
+          <p className="text-sm font-medium">
+            {updateMessage.text}
+          </p>
+          <button
+            onClick={() => setUpdateMessage(null)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

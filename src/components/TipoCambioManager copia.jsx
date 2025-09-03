@@ -1,31 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import Sidebar from './Sidebar';
+import iconImage from '../assets/icon.png';
 
 export default function TipoCambioManager({ user, setCurrentView }) {
-  // Estado para la lista de tipos de cambio, carga y errores
   const [tiposCambio, setTiposCambio] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Estados para los modales y el formulario
   const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ fecha: '', tasa: '' });
   const [formError, setFormError] = useState('');
-  
-  // Estado para el modal de confirmación de recálculo
-  const [showRecalculateModal, setShowRecalculateModal] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState(null);
 
-  // Hook para cargar los datos al inicio y cuando el usuario cambia
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     loadTipoCambio();
   }, [user]);
 
-  // Carga los tipos de cambio desde Supabase
   const loadTipoCambio = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -38,7 +43,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
 
       if (fetchError) throw fetchError;
 
-      console.log('📦 Tipos de cambio cargados:', tipos);
       setTiposCambio(tipos || []);
     } catch (err) {
       console.error('❌ Error al cargar tipos de cambio:', err.message);
@@ -48,7 +52,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     }
   };
 
-  // Abre el modal de creación/edición
   const openModal = (tipo = null) => {
     if (tipo) {
       setEditing(tipo);
@@ -62,7 +65,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     setShowModal(true);
   };
 
-  // Cierra el modal de creación/edición
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
@@ -70,34 +72,20 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     setFormError('');
   };
 
-  // Abre el modal de confirmación de eliminación
   const openDeleteModal = (id) => {
     setItemToDelete(id);
     setShowDeleteModal(true);
   };
 
-  // Cierra el modal de confirmación de eliminación
   const closeDeleteModal = () => {
     setItemToDelete(null);
     setShowDeleteModal(false);
   };
-  
-  // Abre el modal de confirmación de recálculo
-  const openRecalculateModal = () => {
-    setShowRecalculateModal(true);
-  };
-  
-  // Cierra el modal de confirmación de recálculo
-  const closeRecalculateModal = () => {
-    setShowRecalculateModal(false);
-  };
 
-  // Maneja los cambios en los inputs del formulario
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Maneja el envío del formulario para crear o actualizar un registro
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -114,12 +102,11 @@ export default function TipoCambioManager({ user, setCurrentView }) {
 
     try {
       if (editing) {
-        // ✅ CORRECCIÓN: Agregando el filtro por usuario_id para cumplir con la política de RLS
         const { error: updateError } = await supabase
           .from('tipos_cambio')
           .update({ tasa: valorFloat })
           .eq('id', editing.id)
-          .eq('usuario_id', user.id); // <--- LÍNEA AÑADIDA
+          .eq('usuario_id', user.id);
 
         if (updateError) throw updateError;
       } else {
@@ -142,11 +129,9 @@ export default function TipoCambioManager({ user, setCurrentView }) {
     }
   };
 
-  // Maneja la eliminación de un registro
   const handleDelete = async () => {
     if (!itemToDelete) return;
     try {
-      // Intenta eliminar registros relacionados primero
       const { error: relatedDeleteError } = await supabase
         .from('entradas_contables')
         .delete()
@@ -156,12 +141,11 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         throw relatedDeleteError;
       }
       
-      // Luego elimina el registro principal
       const { error: deleteError } = await supabase
         .from('tipos_cambio')
         .delete()
         .eq('id', itemToDelete)
-        .eq('usuario_id', user.id); // Añadir filtro de seguridad aquí también
+        .eq('usuario_id', user.id);
 
       if (deleteError) throw deleteError;
 
@@ -173,18 +157,16 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       closeDeleteModal();
     }
   };
-
-  // Maneja el recálculo masivo de todos los registros
-  const handleRecalcularTodosLosRegistros = async () => {
-    if (!window.confirm('¿Estás seguro de que deseas recalcular todos los registros contables con los tipos de cambio actuales?')) {
-      return;
-    }
-
+  
+  const handleRecalculate = async () => {
+    setIsRecalculating(true);
+    setUpdateMessage(null);
     try {
-      setLoading(true);
-      setError(null);
+      if (!user) {
+        setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
+        return;
+      }
 
-      // 1. Obtener todos los tipos de cambio
       const { data: tipos, error: tcError } = await supabase
         .from('tipos_cambio')
         .select('fecha, tasa')
@@ -193,7 +175,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       if (tcError) throw tcError;
 
       if (!tipos || tipos.length === 0) {
-        alert('No hay tipos de cambio cargados.');
+        setUpdateMessage({ type: 'error', text: 'No hay tipos de cambio cargados.' });
         return;
       }
 
@@ -202,7 +184,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         return acc;
       }, {});
 
-      // 2. Obtener todas las entradas contables
       const { data: entradas, error: entradasError } = await supabase
         .from('entradas_contables')
         .select('id, fecha, importe_ars, importe_usd, moneda')
@@ -211,14 +192,10 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       if (entradasError) throw entradasError;
 
       if (!entradas || entradas.length === 0) {
-        alert('No hay entradas contables para recalcular.');
+        setUpdateMessage({ type: 'success', text: 'No hay entradas contables para recalcular.' });
         return;
       }
 
-      // 🔍 DEBUG: Ver entradas originales
-      console.log('📥 Entradas originales:', entradas);
-
-      // 3. Preparar las promesas de actualización
       const actualizaciones = [];
 
       entradas.forEach((entrada) => {
@@ -226,46 +203,38 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         if (!tasa || tasa <= 0) return;
 
         let nuevoARS, nuevoUSD;
+        let debeActualizar = false;
 
         if (entrada.moneda === 'ARS') {
-          // Mantener `importe_ars`, recalcular `importe_usd`
           nuevoARS = entrada.importe_ars;
-          nuevoUSD = Math.round((entrada.importe_ars / tasa) * 100) / 100;
+          nuevoUSD = parseFloat((entrada.importe_ars / tasa).toFixed(2));
+          if (nuevoUSD !== entrada.importe_usd) {
+            debeActualizar = true;
+          }
         } else {
-          // Mantener `importe_usd`, recalcular `importe_ars`
           nuevoUSD = entrada.importe_usd;
-          nuevoARS = Math.round((entrada.importe_usd * tasa) * 100) / 100;
+          nuevoARS = parseFloat((entrada.importe_usd * tasa).toFixed(2));
+          if (nuevoARS !== entrada.importe_ars) {
+            debeActualizar = true;
+          }
         }
-
-        // 🔍 DEBUG: Ver cada cálculo
-        console.log(`📌 ID ${entrada.id}:`, {
-          moneda: entrada.moneda,
-          original_ars: entrada.importe_ars,
-          original_usd: entrada.importe_usd,
-          tasa,
-          nuevo_ars: nuevoARS,
-          nuevo_usd: nuevoUSD
-        });
         
-        // CORRECCIÓN: Agregar la promesa de actualización individual
-        actualizaciones.push(
-          supabase
-            .from('entradas_contables')
-            .update({ importe_ars: nuevoARS, importe_usd: nuevoUSD })
-            .eq('id', entrada.id)
-            .eq('usuario_id', user.id)
-        );
+        if (debeActualizar) {
+          actualizaciones.push(
+            supabase
+              .from('entradas_contables')
+              .update({ importe_ars: nuevoARS, importe_usd: nuevoUSD })
+              .eq('id', entrada.id)
+              .eq('usuario_id', user.id)
+          );
+        }
       });
 
       if (actualizaciones.length === 0) {
-        alert('No hay registros para recalcular.');
+        setUpdateMessage({ type: 'success', text: 'No se encontraron registros para recalcular. Ya están actualizados.' });
         return;
       }
 
-      // 🔍 DEBUG: Ver todos los valores a actualizar
-      console.log('📤 Ejecutando actualizaciones en paralelo:', actualizaciones.length);
-
-      // 4. Hacer el update en paralelo
       const results = await Promise.all(actualizaciones);
 
       const errors = results.filter(result => result.error);
@@ -273,18 +242,45 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         console.error('❌ Errores en actualizaciones:', errors);
         throw new Error('Algunos registros no se pudieron actualizar.');
       }
-
-      alert(`¡Recálculo masivo completado! ${actualizaciones.length} registros actualizados.`);
+      
+      setUpdateMessage({ type: 'success', text: `¡Recálculo masivo completado! ${actualizaciones.length} registros actualizados.` });
     } catch (err) {
       console.error('Error al recalcular:', err.message);
-      setError('Error al recalcular. Intenta nuevamente.');
+      setUpdateMessage({ type: 'error', text: 'Error al recalcular. Intenta nuevamente.' });
     } finally {
-      setLoading(false);
+      setIsRecalculating(false);
+      setTimeout(() => setUpdateMessage(null), 5000);
+    }
+  };
+
+  const handleActualizarTipoCambio = async () => {
+    setIsUpdating(true);
+    setUpdateMessage(null);
+    try {
+      if (!user) {
+        setUpdateMessage({ type: 'error', text: 'Usuario no logueado.' });
+        return;
+      }
+      
+      const { data, error: invokeError } = await supabase.functions.invoke('actualizar-tipo-cambio', {
+        body: { user_id: user.id },
+      });
+      
+      if (invokeError) throw invokeError;
+      
+      await loadTipoCambio();
+      setUpdateMessage({ type: 'success', text: data?.message || 'Tipo de cambio actualizado correctamente.' });
+    } catch (err) {
+      console.error('Error al actualizar tipo de cambio:', err);
+      setUpdateMessage({ type: 'error', text: 'Error al actualizar el tipo de cambio. Revisa la consola.' });
+    } finally {
+      setIsUpdating(false);
+      setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <div className="flex h-screen bg-gray-100 font-sans">
       <Sidebar
         currentView="tipo-cambio"
         setCurrentView={setCurrentView}
@@ -292,8 +288,12 @@ export default function TipoCambioManager({ user, setCurrentView }) {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-          <h2 className="text-2xl font-semibold text-gray-800">Tipo de Cambio</h2>
+        <header className="bg-white shadow-sm p-6">
+          <div className="flex items-center space-x-4">
+            <img src={iconImage} alt="Gestión Patrimonial Icono" className="h-8 w-8 object-contain" />
+            <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-800 mt-4">Tipo de Cambio</h2>
         </header>
         
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
@@ -307,27 +307,53 @@ export default function TipoCambioManager({ user, setCurrentView }) {
               <p className="text-sm">Detalles: <span className="font-mono text-red-800">{error}</span></p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+              <div className="p-6 flex justify-between items-center flex-wrap gap-4">
                 <h3 className="text-lg font-semibold text-gray-800">Registros de Tipo de Cambio</h3>
-                <button 
-                  onClick={() => openModal()}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
-                >
-                  Nuevo Registro
-                </button>
+                <div className="flex space-x-3">
+                  {/* ✅ MODIFICADO: El botón de Recalcular llama a la nueva función */}
+                  <div className="flex flex-col items-center space-y-2">
+                    <button
+                      onClick={handleRecalculate}
+                      disabled={isRecalculating}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      <svg className={`animate-spin h-5 w-5 ${isRecalculating ? '' : 'hidden'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                      </svg>
+                      <span>Recalcular registros</span>
+                    </button>
+                    {isRecalculating && <p className="text-sm text-gray-500 italic mt-2">Calculando...</p>}
+                  </div>
+
+                  <button 
+                    onClick={() => openModal()}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span>Nuevo Registro</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="px-6 py-4 bg-blue-50 border-b border-gray-200">
+              <div className="px-6 pb-6 flex justify-end flex-col items-end space-y-2">
                 <button
-                  onClick={handleRecalcularTodosLosRegistros}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
+                  onClick={handleActualizarTipoCambio}
+                  disabled={isUpdating}
+                  className={`bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2 ${
+                    isUpdating ? 'opacity-70 cursor-not-allowed' : ''
+                  }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a2.252 2.252 0 0 0 1.588.662 2.252 2.252 0 0 0 1.588-.662l3.181-3.183m0 0v4.991m0-4.991a2.252 2.252 0 0 1 1.588-.662 2.252 2.252 0 0 1 1.588.662l3.181 3.183a2.252 2.252 0 0 1 1.588.662 2.252 2.252 0 0 1 1.588-.662l3.181-3.183" />
+                  <svg className={`animate-spin h-5 w-5 ${isUpdating ? '' : 'hidden'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
                   </svg>
-                  <span>Recalcular todos los registros</span>
+                  <span>{isUpdating ? 'Actualizando...' : 'Actualizar Valor Online'}</span>
                 </button>
+                {isUpdating && <p className="text-sm text-gray-500 italic mt-2">Actualizando tipo de cambio...</p>}
               </div>
 
               <div className="overflow-x-auto">
@@ -376,7 +402,7 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         </main>
       </div>
 
-      {/* Modal para Crear/Editar */}
+      {/* Modals para Crear/Editar y Eliminar (mantienen su fondo negro para ser modales) */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
@@ -444,7 +470,6 @@ export default function TipoCambioManager({ user, setCurrentView }) {
         </div>
       )}
       
-      {/* Modal de confirmación de eliminación */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-auto">
@@ -467,6 +492,23 @@ export default function TipoCambioManager({ user, setCurrentView }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ✅ MODIFICADO: Ahora es una barra de notificación en la parte superior */}
+      {updateMessage && (
+        <div className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 shadow-lg transition-all duration-300 ${
+          updateMessage.type === 'success' ? 'bg-green-100 text-green-700 border-b border-green-200' : 'bg-red-100 text-red-700 border-b border-red-200'
+        }`}>
+          <p className="text-sm font-medium">
+            {updateMessage.text}
+          </p>
+          <button
+            onClick={() => setUpdateMessage(null)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

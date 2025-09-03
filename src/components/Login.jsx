@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../services/supabase'
+import logoImage from '../assets/favicon-256.png'; 
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('')
@@ -51,7 +52,12 @@ export default function Login({ onLogin }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center mb-6">Sistema Contable</h2>
+        <div className="flex justify-center mb-4">
+          <img src={logoImage} alt="Logo de Gestión Patrimonial" className="h-20 w-20 object-contain" />
+        </div>
+        
+        {/* ✅ CORREGIDO: Título cambiado a "Gestión Patrimonial" */}
+        <h2 className="text-2xl font-bold text-center mb-6">Gestión Patrimonial</h2> 
         
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
