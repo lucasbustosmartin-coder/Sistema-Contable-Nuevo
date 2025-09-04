@@ -82,7 +82,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
         }
       }
 
-      setUpdateMessage({ type: 'info', text: 'Actualizando los valors de los registros contables  y los precios de los activos en cartera...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando los valors de los registros contables y los precios de los activos en cartera...' });
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const { data: preciosData, error: preciosError } = await supabase.functions.invoke('actualizar-precios-docta', {
@@ -104,7 +104,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       setUpdateMessage({ type: 'info', text: 'Iniciando actualización completa...' });
 
       // 1. Actualizar Tipo de Cambio
-      setUpdateMessage({ type: 'info', text: 'Actualizando la inforamción del tipo de cambio Mep...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando la información del tipo de cambio Mep...' });
       const { error: tcError } = await supabase.functions.invoke('actualizar-tipo-cambio', {
         body: { user_id: user.id },
       });
@@ -156,7 +156,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
     }
     return value;
   };
-  
+
   // ✅ CORREGIDO: Lógica de cálculo unificada (misma que en PortfolioDetail)
   const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos') => {
     const filteredTransactions = brokerFilter === 'todos'
@@ -292,7 +292,6 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       cantidadActivos
     };
   };
-
 
   const loadPortfolios = async () => {
     try {
