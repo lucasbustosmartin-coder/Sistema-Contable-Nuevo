@@ -5,7 +5,7 @@ import iconImage from '../../assets/icon.png';
 
 export default function PortfolioDetail({ portfolioId, user, setCurrentView, selectedCurrency }) {
   const [portfolio, setPortfolio] = useState(null);
-  const [activos, setActivos] = useState([]);
+  const [portfolios, setPortfolios] = useState([]); // ✅ NUEVO: Estado para guardar la lista de todas las carteras
   const [transacciones, setTransacciones] = useState([]);
   const [tiposCambio, setTiposCambio] = useState([]);
   const [brokers, setBrokers] = useState([]);
@@ -44,6 +44,8 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   const [cantidadDisponible, setCantidadDisponible] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState(null);
+  
+  const [currentPortfolioId, setCurrentPortfolioId] = useState(portfolioId); // ✅ NUEVO: Estado para la ID de la cartera actual
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -58,20 +60,42 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return () => document.head.removeChild(script);
   }, []);
 
+  // ✅ MODIFICADO: Ahora depende de `currentPortfolioId`
   useEffect(() => {
-    if (user && portfolioId) {
+    if (user && currentPortfolioId) {
       fetchPortfolioDetails();
       fetchActivos();
       fetchTiposCambio();
       fetchBrokers();
     }
-  }, [user, portfolioId]);
+  }, [user, currentPortfolioId]);
   
+  useEffect(() => {
+    if (user) {
+      fetchAllPortfolios(); // ✅ NUEVO: Cargar todas las carteras al inicio
+    }
+  }, [user]);
+
   useEffect(() => {
     setMonedaSeleccionada(selectedCurrency);
     setMonedaSeleccionadaTransacciones(selectedCurrency);
   }, [selectedCurrency]);
+
+  // ✅ NUEVO: Función para obtener todas las carteras del usuario
+  const fetchAllPortfolios = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('portfolios')
+        .select('*')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      setPortfolios(data || []);
+    } catch (err) {
+      console.error('Error fetching all portfolios:', err.message);
+    }
+  };
   
+  // ✅ MODIFICADO: Usa `currentPortfolioId` en lugar de `portfolioId`
   const handleFullUpdate = async () => {
     setIsUpdating(true);
     try {
@@ -163,7 +187,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       const { data: portfolioData, error: portfolioError } = await supabase
         .from('portfolios')
         .select('*')
-        .eq('id', portfolioId)
+        .eq('id', currentPortfolioId)
         .eq('user_id', user.id)
         .single();
 
@@ -180,7 +204,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       const { data: transaccionesData, error: transaccionesError } = await supabase
         .from('transacciones')
         .select('*, activos(id, simbolo, nombre, moneda, tipo, ultimo_precio, ultimo_precio_ars), brokers(nombre, cuenta_comitente)')
-        .eq('portafolio_id', portfolioId);
+        .eq('portafolio_id', currentPortfolioId);
 
       if (transaccionesError) {
         throw transaccionesError;
@@ -307,7 +331,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         precio_unitario: parseFloat(newTransaction.precio_unitario),
         fecha: newTransaction.fecha,
         moneda: newTransaction.moneda,
-        portafolio_id: portfolioId,
+        portafolio_id: currentPortfolioId, // ✅ MODIFICADO: Usa `currentPortfolioId`
         broker_id: newTransaction.broker_id,
       };
 
@@ -951,7 +975,22 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           </div>
         </div>
         <h2 className="text-2xl font-semibold text-gray-800 mt-4">
-          {portfolio.name} <span className="text-lg text-gray-500">({portfolio.description})</span>
+          <label htmlFor="portfolio-selector" className="sr-only">Seleccionar Cartera</label>
+          <select
+            id="portfolio-selector"
+            value={currentPortfolioId}
+            onChange={(e) => setCurrentPortfolioId(e.target.value)}
+            className="text-2xl font-semibold text-gray-800 bg-white border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+          >
+            {portfolios.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-lg text-gray-500 ml-4">
+            ({portfolio.description})
+          </span>
         </h2>
       </header>
       
@@ -1302,7 +1341,9 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                               <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{formatDate(t.fecha)}</td>
                               <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{t.cantidad.toLocaleString('es-AR')}</td>
                               <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
-                                {getTransactionPrice(t, monedaSeleccionada).toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                                {monedaSeleccionada === 'USD'
+                                  ? `$${getTransactionPrice(t, monedaSeleccionada).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
+                                  : `$${getTransactionPrice(t, monedaSeleccionada).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
                                 {costoTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
