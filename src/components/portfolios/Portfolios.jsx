@@ -9,6 +9,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
   const [newPortfolioData, setNewPortfolioData] = useState({ name: '', description: '' });
   const [formError, setFormError] = useState('');
   const [tiposCambio, setTiposCambio] = useState([]);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -99,7 +100,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
   };
 
   const handleFullUpdate = async () => {
-    setLoading(true);
+    setIsUpdating(true);
     try {
       setUpdateMessage({ type: 'info', text: 'Iniciando actualización completa...' });
 
@@ -120,6 +121,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       setUpdateMessage({ type: 'error', text: err.message || 'Error en la actualización. Por favor, intenta de nuevo.' });
     } finally {
       loadPortfolios();
+      setIsUpdating(false);
       setTimeout(() => setUpdateMessage(null), 5000);
     }
   };
@@ -375,12 +377,36 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
             <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
           </div>
           <div className="flex space-x-4">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-black text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors duration-150"
-              >
-                Crear Portafolio
-              </button>
+            <button
+              onClick={handleFullUpdate}
+              disabled={isUpdating}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
+                isUpdating ? 'bg-gray-400 cursor-not-allowed text-gray-200' : 'bg-gray-600 hover:bg-gray-700 text-white'
+              }`}
+            >
+              {isUpdating ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                  </svg>
+                  <span>Actualizando...</span>
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.03M4.032 9.417l2.687-2.685m-2.687 2.685a8.25 8.25 0 0113.803-3.03L21.03 3.485c.036.002.071.006.106.01L2.985 19.644z" />
+                  </svg>
+                  <span>Actualizar precios</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-black text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors duration-150"
+            >
+              Crear Portafolio
+            </button>
           </div>
         </div>
         <h2 className="text-2xl font-semibold text-gray-800 mt-4">Portafolios</h2>
