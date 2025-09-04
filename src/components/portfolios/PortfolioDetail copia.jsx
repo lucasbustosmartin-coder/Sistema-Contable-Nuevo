@@ -410,17 +410,13 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
     return value;
   };
-  
-  // ✅ CORREGIDO: Lógica de cálculo con FIFO
+
   const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos') => {
     const filteredTransactions = brokerFilter === 'todos'
       ? transacciones
       : transacciones.filter(t => t.broker_id === brokerFilter);
       
     const holdings = {};
-
-    // Ordenar transacciones por fecha de forma ascendente
-    filteredTransactions.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
     filteredTransactions.forEach(t => {
       const activoId = t.activo_id;
@@ -430,13 +426,12 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           costo_total_ars: 0,
           costo_total_usd: 0,
           activoInfo: t.activos,
-          brokers: {},
-          compras: [] // Almacenará las compras abiertas de este activo
+          brokers: {}
         };
       }
       
-      const cantidad = parseFloat(t.cantidad);
-      const precioUnitario = parseFloat(t.precio_unitario);
+      const cantidad = t.cantidad;
+      const precioUnitario = t.precio_unitario;
       const montoTransaccion = cantidad * precioUnitario;
       const esBono = t.activos?.tipo?.toLowerCase() === 'bono';
       
@@ -453,65 +448,18 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
       
       if (t.tipo_operacion === 'compra') {
-        const costoUnitarioArs = esBono ? (costoArs / 100) / cantidad : costoArs / cantidad;
-        const costoUnitarioUsd = esBono ? (costoUsd / 100) / cantidad : costoUsd / cantidad;
-        
-        holdings[activoId].compras.push({
-          id: t.id,
-          cantidad_restante: cantidad,
-          costo_unitario_ars: costoUnitarioArs,
-          costo_unitario_usd: costoUnitarioUsd,
-          broker_id: brokerId,
-        });
-        
+        holdings[activoId].cantidad += cantidad;
+        holdings[activoId].brokers[brokerId].cantidad += cantidad;
+        holdings[activoId].costo_total_ars += esBono ? costoArs / 100 : costoArs;
+        holdings[activoId].costo_total_usd += esBono ? costoUsd / 100 : costoUsd;
+        holdings[activoId].brokers[brokerId].costo_total_ars += esBono ? costoArs / 100 : costoArs;
+        holdings[activoId].brokers[brokerId].costo_total_usd += esBono ? costoUsd / 100 : costoUsd;
       } else if (t.tipo_operacion === 'venta') {
-        let cantidadPendiente = cantidad;
-        
-        // Procesa las ventas contra las compras más antiguas (FIFO)
-        for (let i = 0; i < holdings[activoId].compras.length && cantidadPendiente > 0; i++) {
-          const compra = holdings[activoId].compras[i];
-          if (compra.cantidad_restante > 0) {
-            const cantidadARestar = Math.min(cantidadPendiente, compra.cantidad_restante);
-            compra.cantidad_restante -= cantidadARestar;
-            cantidadPendiente -= cantidadARestar;
-          }
-        }
+        holdings[activoId].cantidad -= cantidad;
+        holdings[activoId].brokers[brokerId].cantidad -= cantidad;
       }
     });
 
-    // Calcular la cantidad final y el costo total a partir de las compras restantes
-    for (const activoId in holdings) {
-      const holding = holdings[activoId];
-      holding.cantidad = 0;
-      holding.costo_total_ars = 0;
-      holding.costo_total_usd = 0;
-      for (const brokerId in holding.brokers) {
-        holding.brokers[brokerId].cantidad = 0;
-        holding.brokers[brokerId].costo_total_ars = 0;
-        holding.brokers[brokerId].costo_total_usd = 0;
-      }
-      
-      holding.compras.forEach(compra => {
-        const cantidadRestante = compra.cantidad_restante;
-        if (cantidadRestante > 0) {
-          holding.cantidad += cantidadRestante;
-          holding.brokers[compra.broker_id].cantidad += cantidadRestante;
-          holding.costo_total_ars += cantidadRestante * compra.costo_unitario_ars;
-          holding.costo_total_usd += cantidadRestante * compra.costo_unitario_usd;
-          holding.brokers[compra.broker_id].costo_total_ars += cantidadRestante * compra.costo_unitario_ars;
-          holding.brokers[compra.broker_id].costo_total_usd += cantidadRestante * compra.costo_unitario_usd;
-        }
-      });
-
-      const esBono = holding.activoInfo?.tipo?.toLowerCase() === 'bono';
-      const valorArs = holding.cantidad > 0 ? (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio_ars / 100 : holding.cantidad * holding.activoInfo.ultimo_precio_ars) : 0;
-      const valorUsd = holding.cantidad > 0 ? (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio / 100 : holding.cantidad * holding.activoInfo.ultimo_precio) : 0;
-      
-      holding.valor_actual_ars = valorArs;
-      holding.valor_actual_usd = valorUsd;
-    }
-    
-    // Calcular los totales del portafolio
     let valorActualArs = 0;
     let valorActualUsd = 0;
     let costoTotalArs = 0;
@@ -519,16 +467,24 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
 
     for (const activoId in holdings) {
       const holding = holdings[activoId];
-      valorActualArs += holding.valor_actual_ars;
-      valorActualUsd += holding.valor_actual_usd;
+      const activoInfo = holding.activoInfo;
+      
+      const esBono = activoInfo?.tipo?.toLowerCase() === 'bono';
+
+      const valorArs = (esBono ? holding.cantidad * activoInfo.ultimo_precio_ars / 100 : holding.cantidad * activoInfo.ultimo_precio_ars);
+      const valorUsd = (esBono ? holding.cantidad * activoInfo.ultimo_precio / 100 : holding.cantidad * activoInfo.ultimo_precio);
+
+      valorActualArs += valorArs;
+      valorActualUsd += valorUsd;
+
       costoTotalArs += holding.costo_total_ars;
       costoTotalUsd += holding.costo_total_usd;
     }
-
+    
     const rendimientoMontoArs = valorActualArs - costoTotalArs;
-    const rendimientoPorcentajeArs = costoTotalArs > 0 ? (rendimientoMontoArs / costoTotalArs) * 100 : 0;
+    const rendimientoPorcentajeArs = costoTotalArs > 0 ? (valorActualArs / costoTotalArs - 1) * 100 : 0;
     const rendimientoMontoUsd = valorActualUsd - costoTotalUsd;
-    const rendimientoPorcentajeUsd = costoTotalUsd > 0 ? (rendimientoMontoUsd / costoTotalUsd) * 100 : 0;
+    const rendimientoPorcentajeUsd = costoTotalUsd > 0 ? (valorActualUsd / costoTotalUsd - 1) * 100 : 0;
 
     return {
       valorActualArs,

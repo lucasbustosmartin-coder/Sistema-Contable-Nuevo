@@ -81,7 +81,7 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
   
-  const handleViewChange = (viewType, portfolioId = null, selectedCurrency = 'ARS') => {
+  const handleViewChange = (viewType, portfolioId = null, selectedCurrency = 'USD') => {
     const newView = { type: viewType, portfolioId, selectedCurrency };
     setCurrentView(newView);
 
