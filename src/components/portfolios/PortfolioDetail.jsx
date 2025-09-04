@@ -47,6 +47,15 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   
   const [currentPortfolioId, setCurrentPortfolioId] = useState(portfolioId); // ✅ NUEVO: Estado para la ID de la cartera actual
   const [activos, setActivos] = useState([]); // ✅ CORREGIDO: Declaración del estado 'activos'
+  
+  // ✅ NUEVO: Estado para el valor del dólar MEP y su variación
+  const [dolarMep, setDolarMep] = useState({
+    valor: null,
+    variacion: null,
+    porcentaje: null,
+    tendencia: null,
+  });
+
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -74,6 +83,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   useEffect(() => {
     if (user) {
       fetchAllPortfolios(); // ✅ NUEVO: Cargar todas las carteras al inicio
+      fetchMepPrice(); // ✅ NUEVO: Cargar el precio del MEP al inicio
     }
   }, [user]);
 
@@ -81,6 +91,49 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     setMonedaSeleccionada(selectedCurrency);
     setMonedaSeleccionadaTransacciones(selectedCurrency);
   }, [selectedCurrency]);
+  
+  // ✅ NUEVO: Función para obtener el precio del dólar MEP y calcular la variación
+  const fetchMepPrice = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tipos_cambio')
+        .select('fecha, tasa')
+        .order('fecha', { ascending: false }) // Obtener los últimos 2 registros
+        .limit(2);
+
+      if (error) throw error;
+      
+      if (data && data.length >= 2) {
+        const hoy = data[0].tasa;
+        const ayer = data[1].tasa;
+        const variacion = hoy - ayer;
+        const porcentaje = (variacion / ayer) * 100;
+
+        setDolarMep({
+          valor: hoy,
+          variacion: variacion,
+          porcentaje: porcentaje,
+          tendencia: variacion >= 0 ? 'subida' : 'bajada',
+        });
+      } else {
+        console.warn('No hay suficientes datos para calcular la variación del dólar MEP.');
+        setDolarMep({
+          valor: null,
+          variacion: null,
+          porcentaje: null,
+          tendencia: null,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching MEP price:', err.message);
+      setDolarMep({
+        valor: null,
+        variacion: null,
+        porcentaje: null,
+        tendencia: null,
+      });
+    }
+  };
 
   // ✅ NUEVO: Función para obtener todas las carteras del usuario
   const fetchAllPortfolios = async () => {
@@ -175,6 +228,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     } finally {
       fetchPortfolioDetails();
       fetchTiposCambio();
+      fetchMepPrice(); // ✅ NUEVO: Volver a buscar el precio del MEP después de la actualización
       setIsUpdating(false);
       setTimeout(() => setUpdateMessage(null), 5000);
     }
@@ -1018,6 +1072,21 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
             <img src={iconImage} alt="Gestión Patrimonial Icono" className="h-8 w-8 object-contain" />
             <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
           </div>
+          {/* ✅ CÓDIGO MODIFICADO: CARD del Dólar MEP con nuevo formato y estilo */}
+          {dolarMep.valor && (
+            <div className="flex items-center space-x-2 py-2 px-4 bg-white rounded-lg shadow-sm border border-gray-200 text-sm font-semibold">
+              <span className="text-gray-600">Dólar MEP:</span>
+              <span className="text-gray-800">
+                ${dolarMep.valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              {dolarMep.variacion !== null && (
+                <span className={`font-medium flex items-center ${dolarMep.tendencia === 'subida' ? 'text-green-600' : 'text-red-600'}`}>
+                  {dolarMep.tendencia === 'subida' ? '▲' : '▼'}
+                  {Math.abs(dolarMep.variacion).toFixed(2)} ({dolarMep.porcentaje.toFixed(2)}%)
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <h2 className="text-2xl font-semibold text-gray-800 mt-4">
           <label htmlFor="portfolio-selector" className="sr-only">Seleccionar Cartera</label>
