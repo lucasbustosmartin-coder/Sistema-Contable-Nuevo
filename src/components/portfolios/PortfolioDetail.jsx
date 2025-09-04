@@ -77,14 +77,14 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     try {
       setUpdateMessage({ type: 'info', text: 'Iniciando actualización completa...' });
 
-      setUpdateMessage({ type: 'info', text: 'Actualizando tipo de cambio...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando la información del tipo de cambio Mep...' });
       const { error: tcError } = await supabase.functions.invoke('actualizar-tipo-cambio', {
         body: { user_id: user.id },
       });
       if (tcError) throw tcError;
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      setUpdateMessage({ type: 'info', text: 'Recalculando valores contables y actualizando precios...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando valores contables y el precios de los activos en...' });
       
       const { data: tipos, error: reFetchTcError } = await supabase
         .from('tipos_cambio')

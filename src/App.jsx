@@ -65,7 +65,6 @@ export default function App() {
     return <Login onLogin={() => {}} />;
   }
   
-  // ✅ CORRECCIÓN: Unificamos la lógica de navegación y actualización
   const handleViewChange = (viewType, portfolioId = null, selectedCurrency = 'ARS') => {
     const newView = { type: viewType, portfolioId, selectedCurrency };
     setCurrentView(newView);
@@ -105,11 +104,9 @@ export default function App() {
       currentComponent = <ActivosManager user={user} setCurrentView={handleViewChange} updateMessage={updateMessage} setUpdateMessage={setUpdateMessage} />;
       break;
     case 'portfolios':
-      // ✅ Pasamos la moneda seleccionada para que el estado se actualice
       currentComponent = <Portfolios user={user} setCurrentView={handleViewChange} updateMessage={updateMessage} setUpdateMessage={setUpdateMessage} />;
       break;
     case 'portfolio-detail':
-      // ✅ Pasamos la moneda del estado a la prop del componente
       currentComponent = <PortfolioDetail user={user} setCurrentView={handleViewChange} portfolioId={currentView.portfolioId} selectedCurrency={currentView.selectedCurrency} />;
       break;
     default:
@@ -123,7 +120,7 @@ export default function App() {
         setCurrentView={handleViewChange}
         user={user}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col">
         {currentComponent}
       </div>
     </div>

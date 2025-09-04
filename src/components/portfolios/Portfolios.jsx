@@ -82,7 +82,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
         }
       }
 
-      setUpdateMessage({ type: 'info', text: 'Registros contables recalculados. Ahora actualizando precios de los activos...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando los valors de los registros contables  y los precios de los activos en cartera...' });
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const { data: preciosData, error: preciosError } = await supabase.functions.invoke('actualizar-precios-docta', {
@@ -104,7 +104,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       setUpdateMessage({ type: 'info', text: 'Iniciando actualización completa...' });
 
       // 1. Actualizar Tipo de Cambio
-      setUpdateMessage({ type: 'info', text: 'Actualizando tipo de cambio...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando la inforamción del tipo de cambio Mep...' });
       const { error: tcError } = await supabase.functions.invoke('actualizar-tipo-cambio', {
         body: { user_id: user.id },
       });
