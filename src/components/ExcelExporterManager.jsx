@@ -16,7 +16,7 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
   const [fechaHasta, setFechaHasta] = useState(formatDate(today));
 
   const [isXLSXLoaded, setIsXLSXLoaded] = useState(false);
-  const [isExporting, setIsExporting] = useState(false); // ✅ NUEVO: Estado para controlar la exportación
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -100,7 +100,7 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
     }
   };
 
-  const handleExportarVista = async () => { // ✅ MODIFICADO: Ahora es una función asíncrona
+  const handleExportarVista = async () => {
     if (!isXLSXLoaded) {
       alert('La librería de exportación a Excel aún no ha cargado.');
       return;
@@ -111,7 +111,7 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
       return;
     }
 
-    setIsExporting(true); // ✅ Establecer isExporting a true al inicio
+    setIsExporting(true);
 
     try {
       const headers = [
@@ -163,16 +163,13 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
       console.error("Error al exportar a Excel:", err);
       alert("Error al exportar a Excel. Inténtalo de nuevo.");
     } finally {
-      // ✅ Pequeño retraso para que el spinner sea visible
-      await new Promise(resolve => setTimeout(resolve, 100)); 
-      setIsExporting(false); // ✅ Restablecer isExporting a false
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setIsExporting(false);
     }
   };
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
- 
-
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm p-6">
           <div className="flex items-center space-x-4 mb-2">
@@ -213,14 +210,14 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
                   </button>
                   <button
                     onClick={handleExportarVista}
-                    disabled={!isXLSXLoaded || data.length === 0 || isExporting} // ✅ Deshabilitar durante la exportación
-                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center justify-center space-x-2 ${ // ✅ Ajustes para spinner
+                    disabled={!isXLSXLoaded || data.length === 0 || isExporting}
+                    className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center justify-center space-x-2 ${
                       !isXLSXLoaded || data.length === 0 || isExporting
                         ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
-                    {isExporting ? ( // ✅ Renderizado condicional
+                    {isExporting ? (
                       <>
                         <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -229,7 +226,12 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
                         <span>Generando Excel...</span>
                       </>
                     ) : (
-                      <span>{isXLSXLoaded ? 'Exportar vista' : 'Cargando...'}</span>
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        <span>Exportar a Excel</span>
+                      </>
                     )}
                   </button>
                 </div>
