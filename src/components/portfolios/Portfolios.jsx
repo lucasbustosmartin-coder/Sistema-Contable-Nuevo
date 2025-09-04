@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import iconImage from '../../assets/icon.png';
 
-export default function Portfolios({ user, setCurrentView, updateMessage, setUpdateMessage }) {
+// ✅ MODIFICADO: Recibir las nuevas props
+export default function Portfolios({ user, setCurrentView, updateMessage, setUpdateMessage, portfolioCurrencies, setPortfolioCurrencies }) {
   const [portfolios, setPortfolios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -159,7 +160,6 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
     return value;
   };
 
-  // ✅ CORREGIDO: Lógica de cálculo unificada (misma que en PortfolioDetail)
   const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos') => {
     const filteredTransactions = brokerFilter === 'todos'
       ? transacciones
@@ -167,7 +167,6 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       
     const holdings = {};
 
-    // Ordenar transacciones por fecha de forma ascendente
     filteredTransactions.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
     filteredTransactions.forEach(t => {
@@ -179,7 +178,7 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
           costo_total_usd: 0,
           activoInfo: t.activos,
           brokers: {},
-          compras: [] // Almacenará las compras abiertas de este activo
+          compras: []
         };
       }
       
@@ -215,7 +214,6 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       } else if (t.tipo_operacion === 'venta') {
         let cantidadPendiente = cantidad;
         
-        // Procesa las ventas contra las compras más antiguas (FIFO)
         for (let i = 0; i < holdings[activoId].compras.length && cantidadPendiente > 0; i++) {
           const compra = holdings[activoId].compras[i];
           if (compra.cantidad_restante > 0) {
@@ -227,7 +225,6 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       }
     });
 
-    // Calcular la cantidad final y el costo total a partir de las compras restantes
     for (const activoId in holdings) {
       const holding = holdings[activoId];
       holding.cantidad = 0;
@@ -259,7 +256,6 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
       holding.valor_actual_usd = valorUsd;
     }
     
-    // Calcular los totales del portafolio
     let valorActualArs = 0;
     let valorActualUsd = 0;
     let costoTotalArs = 0;
@@ -435,10 +431,13 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {portfolios.length > 0 ? (
               portfolios.map((pf) => (
+                // ✅ MODIFICADO: Pasar las nuevas props
                 <PortfolioCard 
                   key={pf.id} 
                   portfolio={pf} 
-                  setCurrentView={setCurrentView} 
+                  setCurrentView={setCurrentView}
+                  portfolioCurrencies={portfolioCurrencies}
+                  setPortfolioCurrencies={setPortfolioCurrencies}
                 />
               ))
             ) : (
@@ -515,8 +514,10 @@ export default function Portfolios({ user, setCurrentView, updateMessage, setUpd
   );
 }
 
-const PortfolioCard = ({ portfolio, setCurrentView }) => {
-  const [monedaSeleccionada, setMonedaSeleccionada] = useState('ARS');
+// ✅ MODIFICADO: Recibir las nuevas props
+const PortfolioCard = ({ portfolio, setCurrentView, portfolioCurrencies, setPortfolioCurrencies }) => {
+  // ✅ MODIFICADO: Obtener el estado de la moneda de las props
+  const monedaSeleccionada = portfolioCurrencies[portfolio.id] || 'ARS';
   
   const renderRendimiento = () => {
     let rendimientoMonto, rendimientoPorcentaje, currency, isPositive;
@@ -560,13 +561,15 @@ const PortfolioCard = ({ portfolio, setCurrentView }) => {
         
         <div className="bg-gray-200 rounded-full p-1 flex items-center flex-shrink-0">
           <button
-            onClick={() => setMonedaSeleccionada('ARS')}
+            // ✅ MODIFICADO: Actualizar el estado centralizado
+            onClick={() => setPortfolioCurrencies({ ...portfolioCurrencies, [portfolio.id]: 'ARS' })}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${monedaSeleccionada === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
           >
             ARS
           </button>
           <button
-            onClick={() => setMonedaSeleccionada('USD')}
+            // ✅ MODIFICADO: Actualizar el estado centralizado
+            onClick={() => setPortfolioCurrencies({ ...portfolioCurrencies, [portfolio.id]: 'USD' })}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${monedaSeleccionada === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
           >
             USD

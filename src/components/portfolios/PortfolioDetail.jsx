@@ -886,20 +886,20 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
             const esBonoB = b.activoInfo?.tipo?.toLowerCase() === 'bono';
             valueA = monedaSeleccionada === 'ARS' 
               ? (esBonoA ? a.activoInfo.ultimo_precio_ars : a.activoInfo.ultimo_precio_ars) * a.cantidad / (esBonoA ? 100 : 1)
-              : (esBonoA ? a.activoInfo.ultimo_precio : a.activoInfo.ultimo_precio) * a.cantidad / (esBonoA ? 100 : 1);
+              : (esBonoA ? a.activoInfo.ultimo_precio / 100 : a.activoInfo.ultimo_precio) * a.cantidad;
             valueB = monedaSeleccionada === 'ARS' 
               ? (esBonoB ? b.activoInfo.ultimo_precio_ars : b.activoInfo.ultimo_precio_ars) * b.cantidad / (esBonoB ? 100 : 1)
-              : (esBonoB ? b.activoInfo.ultimo_precio : b.activoInfo.ultimo_precio) * b.cantidad / (esBonoB ? 100 : 1);
+              : (esBonoB ? b.activoInfo.ultimo_precio / 100 : b.activoInfo.ultimo_precio) * b.cantidad;
             break;
           case 'rendimiento':
             const costoA = monedaSeleccionada === 'ARS' ? a.costo_total_ars : a.costo_total_usd;
             const costoB = monedaSeleccionada === 'ARS' ? b.costo_total_ars : b.costo_total_usd;
             const valorA = monedaSeleccionada === 'ARS' 
               ? (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? a.activoInfo.ultimo_precio_ars : a.activoInfo.ultimo_precio_ars) * a.cantidad / (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1)
-              : (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? a.activoInfo.ultimo_precio : a.activoInfo.ultimo_precio) * a.cantidad / (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1);
+              : (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? a.activoInfo.ultimo_precio / 100 : a.activoInfo.ultimo_precio) * a.cantidad;
             const valorB = monedaSeleccionada === 'ARS' 
               ? (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? b.activoInfo.ultimo_precio_ars : b.activoInfo.ultimo_precio_ars) * b.cantidad / (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1)
-              : (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? b.activoInfo.ultimo_precio : b.activoInfo.ultimo_precio) * b.cantidad / (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1);
+              : (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? b.activoInfo.ultimo_precio / 100 : b.activoInfo.ultimo_precio) * b.cantidad;
             valueA = valorA - costoA;
             valueB = valorB - costoB;
             break;
@@ -1392,7 +1392,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                 const esBono = activoInfo?.tipo?.toLowerCase() === 'bono';
                 const valorActualHolding = monedaSeleccionada === 'ARS'
                   ? (esBono ? activoInfo.ultimo_precio_ars : activoInfo.ultimo_precio_ars) * holding.cantidad / (esBono ? 100 : 1)
-                  : (esBono ? activoInfo.ultimo_precio : activoInfo.ultimo_precio) * holding.cantidad / (esBono ? 100 : 1);
+                  : (esBono ? activoInfo.ultimo_precio / 100 : activoInfo.ultimo_precio) * holding.cantidad;
                 const rendimientoMontoHolding = valorActualHolding - costoTotalHolding;
                 const rendimientoPorcentajeHolding = costoTotalHolding > 0 ? (valorActualHolding / costoTotalHolding - 1) * 100 : 0;
 
@@ -1446,7 +1446,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                           const costoTransaccion = getTransactionCost(t, monedaSeleccionada);
                           const esBonoTransaccion = t.activos?.tipo?.toLowerCase() === 'bono';
                           const ultimoPrecio = monedaSeleccionada === 'ARS' ? t.activos.ultimo_precio_ars : t.activos.ultimo_precio;
-                          const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio : ultimoPrecio) * t.cantidad / (esBonoTransaccion ? 100 : 1);
+                          const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio) * t.cantidad;
                           const rendimientoMontoTransaccion = valorActualTransaccion - costoTransaccion;
                           const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) * 100 : 0;
 

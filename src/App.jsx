@@ -19,6 +19,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState({ type: 'dashboard' });
   const [loading, setLoading] = useState(true);
   const [updateMessage, setUpdateMessage] = useState(null);
+  // ✅ NUEVO: Estado para guardar la moneda seleccionada por cada portafolio
+  const [portfolioCurrencies, setPortfolioCurrencies] = useState({});
 
   useEffect(() => {
     async function getSession() {
@@ -28,68 +30,37 @@ export default function App() {
     }
     getSession();
 
-    // ✅ MODIFICADO: Agregar un listener de eventos de autenticación
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null);
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user || null);
+      }
+    );
 
-    // ✅ MODIFICADO: Limpiar el listener al desmontar el componente
     return () => {
-      authListener.subscription.unsubscribe();
+      authListener?.unsubscribe();
     };
-
   }, []);
 
-  const handleActualizarPrecios = async () => {
-    setUpdateMessage({ type: 'info', text: 'Actualizando precios...' });
-    try {
-      if (!user) {
-        throw new Error('Usuario no autenticado.');
-      }
-      const { data, error: invokeError } = await supabase.functions.invoke('actualizar-precios-docta', {
-        body: { user_id: user.id },
-      });
-      if (invokeError) throw invokeError;
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setUpdateMessage({ type: 'success', text: data?.message || 'Precios actualizados correctamente.' });
-    } catch (err) {
-      console.error('Error al actualizar precios:', err);
-      setUpdateMessage({ type: 'error', text: err.message || 'Error al actualizar precios.' });
-    } finally {
-      setTimeout(() => setUpdateMessage(null), 5000);
-    }
-  };
-
-  const handleLogin = (newUser) => {
-    setUser(newUser);
+  const handleViewChange = (viewType, portfolioId = null, selectedCurrency = null) => {
+    setCurrentView({
+      type: viewType,
+      portfolioId,
+      selectedCurrency
+    });
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg flex items-center shadow-md">
-          <div className="animate-spin rounded-full h-6 w-6 border-4 border-blue-500 border-t-transparent mr-3"></div>
-          Cargando...
-        </div>
+      <div className="flex justify-center items-center h-screen bg-gray-100">
+        <div className="text-xl font-semibold text-gray-700">Cargando...</div>
       </div>
     );
   }
 
   if (!user) {
-    // ✅ MODIFICADO: Pasar handleLogin a Login
-    return <Login onLogin={handleLogin} />;
+    return <Login />;
   }
-  
-  const handleViewChange = (viewType, portfolioId = null, selectedCurrency = 'USD') => {
-    const newView = { type: viewType, portfolioId, selectedCurrency };
-    setCurrentView(newView);
 
-    if (viewType === 'portfolios') {
-      handleActualizarPrecios();
-    }
-  };
-  
   let currentComponent;
   switch (currentView.type) {
     case 'dashboard':
@@ -104,7 +75,7 @@ export default function App() {
     case 'rubros':
       currentComponent = <RubrosManager user={user} setCurrentView={handleViewChange} />;
       break;
-    case 'conceptos':
+    case 'conceptos-contables':
       currentComponent = <ConceptosContablesManager user={user} setCurrentView={handleViewChange} />;
       break;
     case 'entradas-contables':
@@ -120,10 +91,23 @@ export default function App() {
       currentComponent = <ActivosManager user={user} setCurrentView={handleViewChange} updateMessage={updateMessage} setUpdateMessage={setUpdateMessage} />;
       break;
     case 'portfolios':
-      currentComponent = <Portfolios user={user} setCurrentView={handleViewChange} updateMessage={updateMessage} setUpdateMessage={setUpdateMessage} />;
+      // ✅ MODIFICADO: Pasar el estado centralizado y la función para actualizarlo
+      currentComponent = <Portfolios 
+        user={user} 
+        setCurrentView={handleViewChange} 
+        updateMessage={updateMessage} 
+        setUpdateMessage={setUpdateMessage}
+        portfolioCurrencies={portfolioCurrencies}
+        setPortfolioCurrencies={setPortfolioCurrencies}
+      />;
       break;
     case 'portfolio-detail':
-      currentComponent = <PortfolioDetail user={user} setCurrentView={handleViewChange} portfolioId={currentView.portfolioId} selectedCurrency={currentView.selectedCurrency} />;
+      currentComponent = <PortfolioDetail 
+        user={user} 
+        setCurrentView={handleViewChange} 
+        portfolioId={currentView.portfolioId} 
+        selectedCurrency={currentView.selectedCurrency} 
+      />;
       break;
     default:
       currentComponent = <Dashboard user={user} setCurrentView={handleViewChange} />;

@@ -22,7 +22,6 @@ Deno.serve(async (req)=>{
         persistSession: false
       }
     });
-    // Construye la URL de la API dinámicamente con la fecha actual
     const now = new Date();
     const formattedDate = now.toISOString().split('T')[0];
     const DOCTA_API_URL = `https://www.doctacapital.com.ar/api/series?fromDate=${formattedDate}T03%3A00%3A00.000Z&adjusted=false&markets=stock.bond.cedear&tickers=all&columns=date.ticker.last_price.closing_price.opening_price.low_price.high_price&format=csv&token=b9185669-9246-44ff-841c-2026baa88941`;
@@ -73,7 +72,8 @@ Deno.serve(async (req)=>{
         priceMap[ticker] = parseFloat(item.last_price);
       }
     });
-    const { data: tcData, error: tcError } = await supabase.from('tipos_cambio').select('tasa').order('fecha', {
+    // ✅ CORREGIDO: Se obtiene el tipo de cambio filtrando por el user_id
+    const { data: tcData, error: tcError } = await supabase.from('tipos_cambio').select('tasa').eq('usuario_id', user_id).order('fecha', {
       ascending: false
     }).limit(1).single();
     if (tcError) {
@@ -101,8 +101,6 @@ Deno.serve(async (req)=>{
     }
     let registrosActualizados = 0;
     const errors = [];
-    console.log("Símbolos de la base de datos:", activosUsuario.map((a)=>a.simbolo));
-    console.log("Símbolos con precios de la API:", Object.keys(priceMap));
     const updateOperations = activosUsuario.map((activo)=>{
       return async ()=>{
         const simboloDB = activo.simbolo.toUpperCase();
@@ -113,13 +111,11 @@ Deno.serve(async (req)=>{
         }
         let ultimo_precio_usd;
         let ultimo_precio_ars;
-        if (activo.moneda === 'ARS') {
-          ultimo_precio_usd = parseFloat((precioAPI / tipoCambio).toFixed(4));
-          ultimo_precio_ars = precioAPI;
-        } else {
-          ultimo_precio_usd = parseFloat(precioAPI.toFixed(4));
-          ultimo_precio_ars = precioAPI * tipoCambio;
-        }
+        
+        // Asumiendo que todos los precios de la API son en ARS
+        ultimo_precio_ars = precioAPI;
+        ultimo_precio_usd = parseFloat((precioAPI / tipoCambio).toFixed(4));
+        
         const updatePayload = {
           fecha_actualizacion: new Date().toISOString(),
           ultimo_precio: ultimo_precio_usd,
