@@ -27,6 +27,17 @@ export default function App() {
       setLoading(false);
     }
     getSession();
+
+    // ✅ MODIFICADO: Agregar un listener de eventos de autenticación
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    // ✅ MODIFICADO: Limpiar el listener al desmontar el componente
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+
   }, []);
 
   const handleActualizarPrecios = async () => {
@@ -50,6 +61,10 @@ export default function App() {
     }
   };
 
+  const handleLogin = (newUser) => {
+    setUser(newUser);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -62,7 +77,8 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login onLogin={() => {}} />;
+    // ✅ MODIFICADO: Pasar handleLogin a Login
+    return <Login onLogin={handleLogin} />;
   }
   
   const handleViewChange = (viewType, portfolioId = null, selectedCurrency = 'ARS') => {

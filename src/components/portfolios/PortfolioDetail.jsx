@@ -84,7 +84,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       if (tcError) throw tcError;
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      setUpdateMessage({ type: 'info', text: 'Actualizando valores contables y el precios de los activos en...' });
+      setUpdateMessage({ type: 'info', text: 'Actualizando valores contables y el precios de los activos en cartera...' });
       
       const { data: tipos, error: reFetchTcError } = await supabase
         .from('tipos_cambio')
@@ -1276,8 +1276,9 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                     </div>
 
                     <h5 className="text-sm font-semibold text-gray-700 mb-2">Detalle de Compras:</h5>
+                    <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-100">
+                      <thead className="bg-gray-100 sticky top-0">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                           <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Nominales</th>
@@ -1318,6 +1319,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 );
               })}
@@ -1503,9 +1505,9 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-y-auto max-h-[500px]">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cuenta Comitente</th>

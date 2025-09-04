@@ -14,14 +14,17 @@ export default function Login({ onLogin }) {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
       if (error) throw error
 
-      onLogin()
+      // ✅ MODIFICADO: Pasa el objeto de usuario a la función onLogin
+      if (data?.user) {
+        onLogin(data.user);
+      }
     } catch (error) {
       setError(error.message)
     } finally {
@@ -34,12 +37,17 @@ export default function Login({ onLogin }) {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password
       })
 
       if (error) throw error
+      
+      // ✅ MODIFICADO: Pasa el objeto de usuario si la creación de cuenta es exitosa
+      if (data?.user) {
+        onLogin(data.user);
+      }
 
       alert('Cuenta creada. Revisa tu email para confirmar.')
     } catch (error) {
