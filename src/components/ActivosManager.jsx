@@ -284,7 +284,7 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
               <p className="text-sm">Detalles: <span className="font-mono text-red-800">{error}</span></p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+            <div className="bg-white rounded-xl shadow-md border border-gray-200">
               <div className="px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
                 <h3 className="text-lg font-semibold text-gray-800">Lista de Activos</h3>
                 <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
@@ -363,7 +363,8 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* ✅ CORRECCIÓN: Se agrega overflow-y-auto al contenedor de la tabla */}
+              <div className="overflow-x-auto max-h-[60vh] lg:max-h-[70vh]">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
