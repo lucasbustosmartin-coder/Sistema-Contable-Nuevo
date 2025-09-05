@@ -21,6 +21,8 @@ export default function Dashboard({ user, setCurrentView }) {
   const [rubrosMap, setRubrosMap] = useState({});
   
   const detalleRef = useRef(null);
+  
+  const [sortConfig, setSortConfig] = useState({ key: 'fecha', direction: 'descending' });
 
   useEffect(() => {
     console.log('El useEffect se ha ejecutado. Dependencias:', { user });
@@ -273,6 +275,64 @@ export default function Dashboard({ user, setCurrentView }) {
   const variacionPorcentajeUsd = patrimonioNetoInicialUsd !== 0 ? ((variacionUsd / patrimonioNetoInicialUsd) * 100).toFixed(2) : 'N/A';
   const variacionColorUsd = variacionUsd >= 0 ? 'text-green-600' : 'text-red-600';
 
+  const requestSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const sortedData = () => {
+    const sortableItems = Object.keys(patrimonioNetoByDate).map(date => ({
+      date,
+      ...patrimonioNetoByDate[date],
+    }));
+
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        let valueA, valueB;
+
+        if (sortConfig.key === 'fecha') {
+          valueA = new Date(a.date);
+          valueB = new Date(b.date);
+        } else if (sortConfig.key === 'Patrimonio Neto') {
+          valueA = a['Patrimonio Neto'];
+          valueB = b['Patrimonio Neto'];
+        } else if (sortConfig.key === 'Patrimonio Neto_usd') {
+          valueA = a['Patrimonio Neto_usd'];
+          valueB = b['Patrimonio Neto_usd'];
+        } else if (sortConfig.key === 'tipoCambio') {
+          valueA = a.tipoCambio;
+          valueB = b.tipoCambio;
+        } else if (sortConfig.key === 'variacionPorcentaje') {
+          const variations = calculateVariations(Object.keys(patrimonioNetoByDate).sort((x, y) => new Date(y) - new Date(x)));
+          valueA = parseFloat(variations[a.date]?.variationPorcentaje) || 0;
+          valueB = parseFloat(variations[b.date]?.variationPorcentaje) || 0;
+        } else if (sortConfig.key === 'variacionPorcentajeUsd') {
+          const variations = calculateVariations(Object.keys(patrimonioNetoByDate).sort((x, y) => new Date(y) - new Date(x)));
+          valueA = parseFloat(variations[a.date]?.variationPorcentajeUsd) || 0;
+          valueB = parseFloat(variations[b.date]?.variationPorcentajeUsd) || 0;
+        } else {
+          valueA = a[sortConfig.key];
+          valueB = b[sortConfig.key];
+        }
+
+        if (valueA < valueB) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (valueA > valueB) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return sortableItems;
+  };
+  
+  const displayData = sortedData();
+
   return (
     <>
       <header className="bg-white shadow-sm p-6">
@@ -363,40 +423,88 @@ export default function Dashboard({ user, setCurrentView }) {
             {/* Contenedor de Tabla */}
             <div className="bg-white rounded-xl shadow-md p-6 mt-6 border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Resumen de Patrimonio Neto por Día</h3>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto h-96">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Patrimonio Neto ARS</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Patrimonio Neto USD</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Cambio</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Variación ARS (%)</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Variación USD (%)</th>
+                      <th 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => requestSort('fecha')}
+                      >
+                        Fecha
+                        {sortConfig.key === 'fecha' && (
+                          <span className="ml-1">{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                        )}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => requestSort('Patrimonio Neto')}
+                      >
+                        Patrimonio Neto ARS
+                        {sortConfig.key === 'Patrimonio Neto' && (
+                          <span className="ml-1">{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                        )}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => requestSort('Patrimonio Neto_usd')}
+                      >
+                        Patrimonio Neto USD
+                        {sortConfig.key === 'Patrimonio Neto_usd' && (
+                          <span className="ml-1">{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                        )}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => requestSort('tipoCambio')}
+                      >
+                        Tipo de Cambio
+                        {sortConfig.key === 'tipoCambio' && (
+                          <span className="ml-1">{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                        )}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => requestSort('variacionPorcentaje')}
+                      >
+                        Variación ARS (%)
+                        {sortConfig.key === 'variacionPorcentaje' && (
+                          <span className="ml-1">{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                        )}
+                      </th>
+                      <th 
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => requestSort('variacionPorcentajeUsd')}
+                      >
+                        Variación USD (%)
+                        {sortConfig.key === 'variacionPorcentajeUsd' && (
+                          <span className="ml-1">{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                        )}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {sortedDates.length > 0 ? (
-                      sortedDates.map((date, i) => {
+                    {displayData.length > 0 ? (
+                      displayData.map((item, i) => {
                         const isLastDate = i === 0;
-                        const pn = patrimonioNetoByDate[date]['Patrimonio Neto'];
-                        const pnUsd = patrimonioNetoByDate[date]['Patrimonio Neto_usd'];
-                        const variation = variations[date];
+                        const pn = item['Patrimonio Neto'];
+                        const pnUsd = item['Patrimonio Neto_usd'];
+                        const variation = variations[item.date];
                         const variationColorArs = variation?.variationMonto >= 0 ? 'text-green-600' : 'text-red-600';
                         const variationColorUsd = variation?.variationMontoUsd >= 0 ? 'text-green-600' : 'text-red-600';
                         
                         return (
                           <tr 
-                            key={date} 
+                            key={item.date} 
                             className={`${isLastDate ? 'font-bold' : ''} hover:bg-gray-50 cursor-pointer`}
-                            onClick={() => cargarDetalle(date)}
+                            onClick={() => cargarDetalle(item.date)}
                           >
                             <td className={`px-6 py-4 whitespace-nowrap text-sm ${isLastDate ? 'text-base text-gray-800' : 'text-gray-800'}`}>
-                              {new Date(date + 'T00:00:00').toLocaleDateString('es-AR')}
+                              {new Date(item.date + 'T00:00:00').toLocaleDateString('es-AR')}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">${pn.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">${pnUsd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">{patrimonioNetoByDate[date]?.tipoCambio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">{item.tipoCambio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${variationColorArs}`}>
                               {variation ? `${variation.variationMonto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${variation.variationPorcentaje}%)` : 'N/A'}
                             </td>

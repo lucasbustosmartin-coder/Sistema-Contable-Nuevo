@@ -3,9 +3,44 @@ import { supabase } from '../../services/supabase';
 import iconImage from '../../assets/icon.png';
 // Quitar la importación de 'react-export-table-to-excel'
 
+// ✅ Importación del componente de la gráfica
+import { Doughnut } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+// ✅ NUEVOS ICONOS PARA LAS PESTAÑAS
+const tabIcons = {
+  resumen: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 0a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25M3.75 12a2.25 2.25 0 0 1 2.25-2.25h12.75a2.25 2.25 0 0 1 2.25 2.25m-16.5 0v2.25a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25V12" />
+    </svg>
+  ),
+  graficos: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM15.75 6h-6M1.5 12h16.5m-16.5 0a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25M1.5 12a2.25 2.25 0 0 1 2.25-2.25h12.75a2.25 2.25 0 0 1 2.25 2.25m-16.5 0v2.25a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25V12" />
+    </svg>
+  ),
+  tenencia: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v2.25a2.25 2.25 0 0 1-2.25 2.25H6.75a2.25 2.25 0 0 1-2.25-2.25V14.25m15 0a3 3 0 0 0-3-3H8.25a3 3 0 0 0-3 3m15 0v-3a3 3 0 0 0-3-3h-9a3 3 0 0 0-3 3v3m15 0-3-3-3 3" />
+    </svg>
+  ),
+  transacciones: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.28-8.28Z" />
+    </svg>
+  ),
+  brokers: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-1.5-18L19.5 21M5.25 3h13.5m-3-6H8.25m-3.75 3h13.5M9 6v15M15 6v15" />
+    </svg>
+  ),
+};
+
 export default function PortfolioDetail({ portfolioId, user, setCurrentView, selectedCurrency }) {
   const [portfolio, setPortfolio] = useState(null);
-  const [portfolios, setPortfolios] = useState([]); // ✅ NUEVO: Estado para guardar la lista de todas las carteras
+  const [portfolios, setPortfolios] = useState([]);
   const [transacciones, setTransacciones] = useState([]);
   const [tiposCambio, setTiposCambio] = useState([]);
   const [brokers, setBrokers] = useState([]);
@@ -40,13 +75,26 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   const [brokerFormError, setBrokerFormError] = useState('');
   
   const [brokerFilter, setBrokerFilter] = useState('todos');
+  const [submarketFilter, setSubmarketFilter] = useState('todos');
+  const [uniqueSubmarkets, setUniqueSubmarkets] = useState([]);
   
   const [cantidadDisponible, setCantidadDisponible] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState(null);
   
-  const [currentPortfolioId, setCurrentPortfolioId] = useState(portfolioId); // ✅ NUEVO: Estado para la ID de la cartera actual
-  const [activos, setActivos] = useState([]); // ✅ CORREGIDO: Declaración del estado 'activos'
+  const [currentPortfolioId, setCurrentPortfolioId] = useState(portfolioId);
+  const [activos, setActivos] = useState([]);
+  
+  const [dolarMep, setDolarMep] = useState({
+    valor: null,
+    variacion: null,
+    porcentaje: null,
+    tendencia: null,
+  });
+
+  const [showChart, setShowChart] = useState(false);
+  const [showSubmarketChart, setShowSubmarketChart] = useState(false);
+
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -61,7 +109,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return () => document.head.removeChild(script);
   }, []);
 
-  // ✅ MODIFICADO: Ahora depende de `currentPortfolioId`
   useEffect(() => {
     if (user && currentPortfolioId) {
       fetchPortfolioDetails();
@@ -73,16 +120,63 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   
   useEffect(() => {
     if (user) {
-      fetchAllPortfolios(); // ✅ NUEVO: Cargar todas las carteras al inicio
+      fetchAllPortfolios();
+      fetchMepPrice();
     }
   }, [user]);
+
+  useEffect(() => {
+    const submarkets = activos.map(a => a.submarket).filter(Boolean);
+    setUniqueSubmarkets([...new Set(submarkets)].sort());
+  }, [activos]);
 
   useEffect(() => {
     setMonedaSeleccionada(selectedCurrency);
     setMonedaSeleccionadaTransacciones(selectedCurrency);
   }, [selectedCurrency]);
+  
+  const fetchMepPrice = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tipos_cambio')
+        .select('fecha, tasa')
+        .order('fecha', { ascending: false })
+        .limit(2);
 
-  // ✅ NUEVO: Función para obtener todas las carteras del usuario
+      if (error) throw error;
+      
+      if (data && data.length >= 2) {
+        const hoy = data[0].tasa;
+        const ayer = data[1].tasa;
+        const variacion = hoy - ayer;
+        const porcentaje = (variacion / ayer) * 100;
+
+        setDolarMep({
+          valor: hoy,
+          variacion: variacion,
+          porcentaje: porcentaje,
+          tendencia: variacion >= 0 ? 'subida' : 'bajada',
+        });
+      } else {
+        console.warn('No hay suficientes datos para calcular la variación del dólar MEP.');
+        setDolarMep({
+          valor: null,
+          variacion: null,
+          porcentaje: null,
+          tendencia: null,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching MEP price:', err.message);
+      setDolarMep({
+        valor: null,
+        variacion: null,
+        porcentaje: null,
+        tendencia: null,
+      });
+    }
+  };
+
   const fetchAllPortfolios = async () => {
     try {
       const { data, error } = await supabase
@@ -96,7 +190,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
   
-  // ✅ MODIFICADO: Usa `currentPortfolioId` en lugar de `portfolioId`
   const handleFullUpdate = async () => {
     setIsUpdating(true);
     try {
@@ -175,6 +268,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     } finally {
       fetchPortfolioDetails();
       fetchTiposCambio();
+      fetchMepPrice();
       setIsUpdating(false);
       setTimeout(() => setUpdateMessage(null), 5000);
     }
@@ -204,7 +298,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       
       const { data: transaccionesData, error: transaccionesError } = await supabase
         .from('transacciones')
-        .select('*, activos(id, simbolo, nombre, moneda, tipo, ultimo_precio, ultimo_precio_ars), brokers(nombre, cuenta_comitente)')
+        .select('*, activos(id, simbolo, nombre, moneda, tipo, ultimo_precio, ultimo_precio_ars, submarket), brokers(nombre, cuenta_comitente)')
         .eq('portafolio_id', currentPortfolioId);
 
       if (transaccionesError) {
@@ -224,8 +318,8 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     try {
       const { data, error } = await supabase
         .from('activos')
-        .select('id, nombre, simbolo, tipo, moneda, ultimo_precio, ultimo_precio_ars')
-        .order('simbolo', { ascending: true }); // ✅ MODIFICADO: ordenar por símbolo
+        .select('id, nombre, simbolo, tipo, moneda, ultimo_precio, ultimo_precio_ars, submarket')
+        .order('simbolo', { ascending: true });
       if (error) throw error;
       setActivos(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -292,7 +386,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       moneda: transaction.moneda,
       broker_id: transaction.broker_id || '',
     });
-    const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter).holdings;
+    const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter).holdings;
     const disponible = currentHoldings[transaction.activo_id]?.brokers[transaction.broker_id]?.cantidad || 0;
     setCantidadDisponible(disponible);
     setShowAddTransactionModal(true);
@@ -307,7 +401,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
       
       if (newTransaction.tipo_operacion === 'venta') {
-        const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter).holdings;
+        const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter).holdings;
         const holdingPorBroker = currentHoldings[newTransaction.activo_id]?.brokers[newTransaction.broker_id]?.cantidad || 0;
         
         if (parseFloat(newTransaction.cantidad) > holdingPorBroker) {
@@ -332,7 +426,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         precio_unitario: parseFloat(newTransaction.precio_unitario),
         fecha: newTransaction.fecha,
         moneda: newTransaction.moneda,
-        portafolio_id: currentPortfolioId, // ✅ MODIFICADO: Usa `currentPortfolioId`
+        portafolio_id: currentPortfolioId,
         broker_id: newTransaction.broker_id,
       };
 
@@ -410,13 +504,16 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
     return value;
   };
+  
+  const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos', submarketFilter = 'todos') => {
+    const filteredTransactions = transacciones.filter(t => {
+      const isBrokerMatch = brokerFilter === 'todos' || t.broker_id === brokerFilter;
+      const isSubmarketMatch = submarketFilter === 'todos' || (t.activos && t.activos.submarket === submarketFilter);
+      return isBrokerMatch && isSubmarketMatch;
+    });
 
-  const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos') => {
-    const filteredTransactions = brokerFilter === 'todos'
-      ? transacciones
-      : transacciones.filter(t => t.broker_id === brokerFilter);
-      
     const holdings = {};
+    filteredTransactions.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
     filteredTransactions.forEach(t => {
       const activoId = t.activo_id;
@@ -426,12 +523,13 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           costo_total_ars: 0,
           costo_total_usd: 0,
           activoInfo: t.activos,
-          brokers: {}
+          brokers: {},
+          compras: []
         };
       }
       
-      const cantidad = t.cantidad;
-      const precioUnitario = t.precio_unitario;
+      const cantidad = parseFloat(t.cantidad);
+      const precioUnitario = parseFloat(t.precio_unitario);
       const montoTransaccion = cantidad * precioUnitario;
       const esBono = t.activos?.tipo?.toLowerCase() === 'bono';
       
@@ -448,18 +546,61 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
       
       if (t.tipo_operacion === 'compra') {
-        holdings[activoId].cantidad += cantidad;
-        holdings[activoId].brokers[brokerId].cantidad += cantidad;
-        holdings[activoId].costo_total_ars += esBono ? costoArs / 100 : costoArs;
-        holdings[activoId].costo_total_usd += esBono ? costoUsd / 100 : costoUsd;
-        holdings[activoId].brokers[brokerId].costo_total_ars += esBono ? costoArs / 100 : costoArs;
-        holdings[activoId].brokers[brokerId].costo_total_usd += esBono ? costoUsd / 100 : costoUsd;
+        const costoUnitarioArs = esBono ? (costoArs / 100) / cantidad : costoArs / cantidad;
+        const costoUnitarioUsd = esBono ? (costoUsd / 100) / cantidad : costoUsd / cantidad;
+        
+        holdings[activoId].compras.push({
+          id: t.id,
+          cantidad_restante: cantidad,
+          costo_unitario_ars: costoUnitarioArs,
+          costo_unitario_usd: costoUnitarioUsd,
+          broker_id: brokerId,
+        });
       } else if (t.tipo_operacion === 'venta') {
-        holdings[activoId].cantidad -= cantidad;
-        holdings[activoId].brokers[brokerId].cantidad -= cantidad;
+        let cantidadPendiente = cantidad;
+        
+        for (let i = 0; i < holdings[activoId].compras.length && cantidadPendiente > 0; i++) {
+          const compra = holdings[activoId].compras[i];
+          if (compra.cantidad_restante > 0) {
+            const cantidadARestar = Math.min(cantidadPendiente, compra.cantidad_restante);
+            compra.cantidad_restante -= cantidadARestar;
+            cantidadPendiente -= cantidadARestar;
+          }
+        }
       }
     });
 
+    for (const activoId in holdings) {
+      const holding = holdings[activoId];
+      holding.cantidad = 0;
+      holding.costo_total_ars = 0;
+      holding.costo_total_usd = 0;
+      for (const brokerId in holding.brokers) {
+        holding.brokers[brokerId].cantidad = 0;
+        holding.brokers[brokerId].costo_total_ars = 0;
+        holding.brokers[brokerId].costo_total_usd = 0;
+      }
+      
+      holding.compras.forEach(compra => {
+        const cantidadRestante = compra.cantidad_restante;
+        if (cantidadRestante > 0) {
+          holding.cantidad += cantidadRestante;
+          holding.brokers[compra.broker_id].cantidad += cantidadRestante;
+          holding.costo_total_ars += cantidadRestante * compra.costo_unitario_ars;
+          holding.costo_total_usd += cantidadRestante * compra.costo_unitario_usd;
+          holding.brokers[compra.broker_id].costo_total_ars += cantidadRestante * compra.costo_unitario_ars;
+          holding.brokers[compra.broker_id].costo_total_usd += cantidadRestante * compra.costo_unitario_usd;
+        }
+      });
+
+      const esBono = holding.activoInfo?.tipo?.toLowerCase() === 'bono';
+      const valorArs = holding.cantidad > 0 ? (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio_ars / 100 : holding.cantidad * holding.activoInfo.ultimo_precio_ars) : 0;
+      const valorUsd = holding.cantidad > 0 ? (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio / 100 : holding.cantidad * holding.activoInfo.ultimo_precio) : 0;
+      
+      holding.valor_actual_ars = valorArs;
+      holding.valor_actual_usd = valorUsd;
+    }
+    
     let valorActualArs = 0;
     let valorActualUsd = 0;
     let costoTotalArs = 0;
@@ -467,24 +608,16 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
 
     for (const activoId in holdings) {
       const holding = holdings[activoId];
-      const activoInfo = holding.activoInfo;
-      
-      const esBono = activoInfo?.tipo?.toLowerCase() === 'bono';
-
-      const valorArs = (esBono ? holding.cantidad * activoInfo.ultimo_precio_ars / 100 : holding.cantidad * activoInfo.ultimo_precio_ars);
-      const valorUsd = (esBono ? holding.cantidad * activoInfo.ultimo_precio / 100 : holding.cantidad * activoInfo.ultimo_precio);
-
-      valorActualArs += valorArs;
-      valorActualUsd += valorUsd;
-
+      valorActualArs += holding.valor_actual_ars;
+      valorActualUsd += holding.valor_actual_usd;
       costoTotalArs += holding.costo_total_ars;
       costoTotalUsd += holding.costo_total_usd;
     }
-    
+
     const rendimientoMontoArs = valorActualArs - costoTotalArs;
-    const rendimientoPorcentajeArs = costoTotalArs > 0 ? (valorActualArs / costoTotalArs - 1) * 100 : 0;
+    const rendimientoPorcentajeArs = costoTotalArs > 0 ? (rendimientoMontoArs / costoTotalArs) * 100 : 0;
     const rendimientoMontoUsd = valorActualUsd - costoTotalUsd;
-    const rendimientoPorcentajeUsd = costoTotalUsd > 0 ? (valorActualUsd / costoTotalUsd - 1) * 100 : 0;
+    const rendimientoPorcentajeUsd = costoTotalUsd > 0 ? (rendimientoMontoUsd / costoTotalUsd) * 100 : 0;
 
     return {
       valorActualArs,
@@ -532,8 +665,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return broker ? broker.nombre : 'N/A';
   };
   
-  // ✅ MODIFICADO: Se declara metrics una sola vez
-  const metrics = calculatePortfolioMetrics(transacciones, brokerFilter);
+  const metrics = calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter);
 
   const handleExportTenencias = async () => {
     if (!isXLSXLoaded) {
@@ -552,7 +684,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     setIsExporting(true);
 
     try {
-      // ✅ MODIFICADO: Añadir nuevos encabezados para precio de compra y precio actual
       const headers = [
         'Activo',
         'Bróker',
@@ -576,18 +707,14 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) : 0;
         
         const precioUnitario = getTransactionPrice(t, monedaSeleccionada);
-        // ✅ NUEVO: Lógica para calcular el precio actual unitario
         const precioActualUnitario = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio);
 
-        // ✅ MODIFICADO: Se agrega el precio de compra y el precio actual
         return [
           { v: `${t.activos.nombre} (${t.activos.simbolo})`, t: 's' },
           { v: getBrokerNameById(t.broker_id), t: 's' },
           { v: formatDate(t.fecha), t: 's' },
           { v: parseFloat(t.cantidad), t: 'n' },
-          // ✅ NUEVO: Agregar precio de compra con formato condicional
           { v: parseFloat(precioUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
-          // ✅ NUEVO: Agregar precio actual con formato condicional
           { v: parseFloat(precioActualUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
           { v: parseFloat(costoTransaccion), t: 'n', z: '#,##0.00' },
           { v: parseFloat(valorActualTransaccion), t: 'n', z: '#,##0.00' },
@@ -600,7 +727,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       window.XLSX.utils.sheet_add_aoa(ws, [headers]);
       window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
 
-      // ✅ MODIFICADO: Se ajustan los anchos de columna para los nuevos campos
       ws['!cols'] = [
         { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, 
         { wch: 25 }, { wch: 25 }, 
@@ -762,8 +888,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   const transactionsToDisplay = sortedTransacciones();
 
   const sortedResumenHoldings = () => {
-    // ✅ MODIFICADO: Se pasa 'transacciones' a la función de cálculo
-    const holdings = Object.values(calculatePortfolioMetrics(transacciones, brokerFilter).holdings);
+    const holdings = Object.values(calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter).holdings);
     const sortableItems = holdings.filter(holding => holding.cantidad > 0);
     
     if (sortResumenConfig.key !== null) {
@@ -788,20 +913,20 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
             const esBonoB = b.activoInfo?.tipo?.toLowerCase() === 'bono';
             valueA = monedaSeleccionada === 'ARS' 
               ? (esBonoA ? a.activoInfo.ultimo_precio_ars : a.activoInfo.ultimo_precio_ars) * a.cantidad / (esBonoA ? 100 : 1)
-              : (esBonoA ? a.activoInfo.ultimo_precio : a.activoInfo.ultimo_precio) * a.cantidad / (esBonoA ? 100 : 1);
+              : (esBonoA ? a.activoInfo.ultimo_precio / 100 : a.activoInfo.ultimo_precio) * a.cantidad;
             valueB = monedaSeleccionada === 'ARS' 
               ? (esBonoB ? b.activoInfo.ultimo_precio_ars : b.activoInfo.ultimo_precio_ars) * b.cantidad / (esBonoB ? 100 : 1)
-              : (esBonoB ? b.activoInfo.ultimo_precio : b.activoInfo.ultimo_precio) * b.cantidad / (esBonoB ? 100 : 1);
+              : (esBonoB ? b.activoInfo.ultimo_precio / 100 : b.activoInfo.ultimo_precio) * b.cantidad;
             break;
           case 'rendimiento':
             const costoA = monedaSeleccionada === 'ARS' ? a.costo_total_ars : a.costo_total_usd;
             const costoB = monedaSeleccionada === 'ARS' ? b.costo_total_ars : b.costo_total_usd;
             const valorA = monedaSeleccionada === 'ARS' 
               ? (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? a.activoInfo.ultimo_precio_ars : a.activoInfo.ultimo_precio_ars) * a.cantidad / (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1)
-              : (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? a.activoInfo.ultimo_precio : a.activoInfo.ultimo_precio) * a.cantidad / (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1);
+              : (a.activoInfo?.tipo?.toLowerCase() === 'bono' ? a.activoInfo.ultimo_precio / 100 : a.activoInfo.ultimo_precio) * a.cantidad;
             const valorB = monedaSeleccionada === 'ARS' 
               ? (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? b.activoInfo.ultimo_precio_ars : b.activoInfo.ultimo_precio_ars) * b.cantidad / (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1)
-              : (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? b.activoInfo.ultimo_precio : b.activoInfo.ultimo_precio) * b.cantidad / (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? 100 : 1);
+              : (b.activoInfo?.tipo?.toLowerCase() === 'bono' ? b.activoInfo.ultimo_precio / 100 : b.activoInfo.ultimo_precio) * b.cantidad;
             valueA = valorA - costoA;
             valueB = valorB - costoB;
             break;
@@ -926,6 +1051,161 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
 
+  const chartData = {
+    labels: resumenHoldingsToDisplay.map(h => `${h.activoInfo.simbolo} (${h.activoInfo.nombre})`),
+    datasets: [
+      {
+        label: 'Distribución por Activo',
+        data: resumenHoldingsToDisplay.map(h => {
+            const esBono = h.activoInfo?.tipo?.toLowerCase() === 'bono';
+            const valor = monedaSeleccionada === 'ARS'
+                ? (esBono ? h.cantidad * h.activoInfo.ultimo_precio_ars / 100 : h.cantidad * h.activoInfo.ultimo_precio_ars)
+                : (esBono ? h.cantidad * h.activoInfo.ultimo_precio / 100 : h.cantidad * h.activoInfo.ultimo_precio);
+            return valor;
+        }),
+        backgroundColor: [
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED'
+        ],
+        hoverOffset: 4
+      }
+    ]
+  };
+
+  const submarketHoldings = resumenHoldingsToDisplay.reduce((acc, holding) => {
+    const submarket = holding.activoInfo.submarket || 'Sin submercado';
+    const esBono = holding.activoInfo?.tipo?.toLowerCase() === 'bono';
+    const valor = monedaSeleccionada === 'ARS'
+        ? (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio_ars / 100 : holding.cantidad * holding.activoInfo.ultimo_precio_ars)
+        : (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio / 100 : holding.cantidad * holding.activoInfo.ultimo_precio);
+    
+    if (acc[submarket]) {
+      acc[submarket] += valor;
+    } else {
+      acc[submarket] = valor;
+    }
+    return acc;
+  }, {});
+
+  const submarketChartData = {
+    labels: Object.keys(submarketHoldings),
+    datasets: [
+      {
+        label: 'Distribución por Submercado',
+        data: Object.values(submarketHoldings),
+        backgroundColor: [
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED'
+        ],
+        hoverOffset: 4
+      }
+    ]
+  };
+  
+  // ✅ CORRECCIÓN: Lógica del plugin de texto central con nuevo formato de moneda
+  const centerTextPlugin = {
+    id: 'centerText',
+    beforeDraw(chart) {
+      const { ctx, width, height } = chart;
+      ctx.restore();
+
+      const totalValue = monedaSeleccionada === 'ARS' ? metrics.valorActualArs : metrics.valorActualUsd;
+      let totalValueString;
+
+      if (Math.abs(totalValue) >= 1000) {
+          totalValueString = `${(totalValue / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} K`;
+      } else {
+          totalValueString = totalValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      const topText = `${monedaSeleccionada} Total`;
+      const bottomText = totalValueString;
+      
+      const chartCenter = {
+          x: width / 2,
+          y: height / 2,
+      };
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const fontTitle = '16px sans-serif';
+      const fontValue = '22px sans-serif';
+      
+      // Mide el texto para un centrado más preciso
+      ctx.font = fontTitle;
+      const topTextMetrics = ctx.measureText(topText);
+      const topTextHeight = topTextMetrics.actualBoundingBoxAscent + topTextMetrics.actualBoundingBoxDescent;
+
+      ctx.font = fontValue;
+      const bottomTextMetrics = ctx.measureText(bottomText);
+      const bottomTextHeight = bottomTextMetrics.actualBoundingBoxAscent + bottomTextMetrics.actualBoundingBoxDescent;
+      
+      const totalTextHeight = topTextHeight + 8 + bottomTextHeight;
+      const startY = chartCenter.y - totalTextHeight / 2;
+
+      ctx.font = fontTitle;
+      ctx.fillStyle = '#6b7280';
+      ctx.fillText(topText, chartCenter.x, startY + topTextHeight / 2);
+
+      ctx.font = fontValue;
+      ctx.fillStyle = '#1f2937';
+      ctx.fillText(bottomText, chartCenter.x, startY + topTextHeight + 8 + bottomTextHeight / 2);
+      
+      ctx.save();
+    },
+  };
+  
+  const chartOptions = {
+    cutout: '70%',
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          boxWidth: 12,
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(2) + '%' : '0.00%';
+            return `${label}: ${value.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })} (${percentage})`;
+          }
+        }
+      }
+    }
+  };
+  
+  const submarketChartOptions = {
+    cutout: '70%',
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          boxWidth: 12,
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(2) + '%' : '0.00%';
+            return `${label}: ${value.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })} (${percentage})`;
+          }
+        }
+      }
+    }
+  };
+
 
   if (loading) {
     return (
@@ -974,6 +1254,20 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
             <img src={iconImage} alt="Gestión Patrimonial Icono" className="h-8 w-8 object-contain" />
             <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
           </div>
+          {dolarMep.valor && (
+            <div className="flex items-center space-x-2 py-2 px-4 bg-white rounded-lg shadow-sm border border-gray-200 text-sm font-semibold">
+              <span className="text-gray-600">Dólar MEP:</span>
+              <span className="text-gray-800">
+                ${dolarMep.valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              {dolarMep.variacion !== null && (
+                <span className={`font-medium flex items-center ${dolarMep.tendencia === 'subida' ? 'text-green-600' : 'text-red-600'}`}>
+                  {dolarMep.tendencia === 'subida' ? '▲' : '▼'}
+                  {Math.abs(dolarMep.variacion).toFixed(2)} ({dolarMep.porcentaje.toFixed(2)}%)
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <h2 className="text-2xl font-semibold text-gray-800 mt-4">
           <label htmlFor="portfolio-selector" className="sr-only">Seleccionar Cartera</label>
@@ -1016,34 +1310,45 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           <div className="flex space-x-4 border-b border-gray-200">
             <button
               onClick={() => handleViewChange('resumen')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'resumen' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'resumen' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Resumen
+              <span className={`text-gray-500 ${currentSubView === 'resumen' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.resumen}</span>
+              <span>Resumen</span>
+            </button>
+            <button
+              onClick={() => handleViewChange('graficos')}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'graficos' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className={`text-gray-500 ${currentSubView === 'graficos' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.graficos}</span>
+              <span>Gráficos</span>
             </button>
             <button
               onClick={() => handleViewChange('tenencia')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'tenencia' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'tenencia' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Tenencia
+              <span className={`text-gray-500 ${currentSubView === 'tenencia' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.tenencia}</span>
+              <span>Tenencia</span>
             </button>
             <button
               onClick={() => handleViewChange('transacciones')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'transacciones' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'transacciones' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Transacciones
+              <span className={`text-gray-500 ${currentSubView === 'transacciones' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.transacciones}</span>
+              <span>Transacciones</span>
             </button>
             <button
               onClick={() => handleViewChange('brokers')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'brokers' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'brokers' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Brókers
+              <span className={`text-gray-500 ${currentSubView === 'brokers' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.brokers}</span>
+              <span>Brókers</span>
             </button>
           </div>
         </div>
 
         {currentSubView === 'resumen' && (
           <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800">Resumen del Portafolio</h3>
               <div className="flex items-center space-x-4">
                 <button
@@ -1065,20 +1370,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                   )}
                   <span>Actualizar precios</span>
                 </button>
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="broker-filter" className="text-sm font-medium text-gray-600">Ver por Bróker:</label>
-                  <select
-                    id="broker-filter"
-                    value={brokerFilter}
-                    onChange={(e) => setBrokerFilter(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="todos">Todos</option>
-                    {brokers.map(broker => (
-                      <option key={broker.id} value={broker.id}>{broker.nombre}</option>
-                    ))}
-                  </select>
-                </div>
                 <div className="bg-gray-200 rounded-full p-1 flex items-center">
                   <button
                     onClick={() => setMonedaSeleccionada('ARS')}
@@ -1092,6 +1383,39 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                   >
                     USD
                   </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-6 items-end justify-between">
+              <div className="flex space-x-4 w-full md:w-auto">
+                <div className="w-1/2 md:w-auto">
+                  <label htmlFor="broker-filter" className="block text-sm font-medium text-gray-700 mb-1">Bróker</label>
+                  <select
+                    id="broker-filter"
+                    value={brokerFilter}
+                    onChange={(e) => setBrokerFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="todos">Todos</option>
+                    {brokers.map(broker => (
+                      <option key={broker.id} value={broker.id}>{broker.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-1/2 md:w-auto">
+                  <label htmlFor="submarket-filter" className="block text-sm font-medium text-gray-700 mb-1">Submercado</label>
+                  <select
+                    id="submarket-filter"
+                    value={submarketFilter}
+                    onChange={(e) => setSubmarketFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="todos">Todos</option>
+                    {uniqueSubmarkets.map(submarket => (
+                      <option key={submarket} value={submarket}>{submarket}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -1216,6 +1540,64 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           </div>
         )}
 
+        {currentSubView === 'graficos' && (
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Gráficos del Portafolio</h3>
+              <div className="bg-gray-200 rounded-full p-1 flex items-center">
+                <button
+                  onClick={() => setMonedaSeleccionada('ARS')}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                >
+                  ARS
+                </button>
+                <button
+                  onClick={() => setMonedaSeleccionada('USD')}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                >
+                  USD
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col md:flex-row space-y-8 md:space-y-0 md:space-x-8">
+              {/* Gráfico de Distribución por Activo */}
+              <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
+                <div className="w-full max-w-lg relative" key={`asset-chart-${monedaSeleccionada}`}>
+                  <Doughnut data={chartData} options={chartOptions} plugins={[centerTextPlugin]} />
+                </div>
+              </div>
+
+              {/* Gráfico de Distribución por Submercado */}
+              <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
+                <div className="w-full max-w-lg relative" key={`submarket-chart-${monedaSeleccionada}`}>
+                  <Doughnut data={submarketChartData} options={submarketChartOptions} plugins={[centerTextPlugin]} />
+                </div>
+              </div>
+            </div>
+
+            {resumenHoldingsToDisplay.length === 0 && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mt-6">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M8.257 3.518A8.96 8.96 0 0112 2.25c3.07 0 5.825 1.488 7.5 3.75a8.96 8.96 0 01-3.75 5.25c-.274-.294-.582-.55-.916-.77A5.992 5.992 0 0012 8.25a5.992 5.992 0 00-4.043 1.455c-.334.22-.642.476-.916.77a8.96 8.96 0 01-3.75-5.25c1.675-2.262 4.43-3.75 7.5-3.75zm1.53 10.96a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zm0 10.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-yellow-800">No hay datos para mostrar</h3>
+                    <div className="mt-2 text-sm text-yellow-700">
+                      <p>Para ver la distribución de tu portafolio, necesitas tener activos con un valor actual mayor a cero.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {currentSubView === 'tenencia' && (
           <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
             <div className="flex justify-between items-center mb-4">
@@ -1279,7 +1661,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                 const esBono = activoInfo?.tipo?.toLowerCase() === 'bono';
                 const valorActualHolding = monedaSeleccionada === 'ARS'
                   ? (esBono ? activoInfo.ultimo_precio_ars : activoInfo.ultimo_precio_ars) * holding.cantidad / (esBono ? 100 : 1)
-                  : (esBono ? activoInfo.ultimo_precio : activoInfo.ultimo_precio) * holding.cantidad / (esBono ? 100 : 1);
+                  : (esBono ? activoInfo.ultimo_precio / 100 : activoInfo.ultimo_precio) * holding.cantidad;
                 const rendimientoMontoHolding = valorActualHolding - costoTotalHolding;
                 const rendimientoPorcentajeHolding = costoTotalHolding > 0 ? (valorActualHolding / costoTotalHolding - 1) * 100 : 0;
 
@@ -1333,7 +1715,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                           const costoTransaccion = getTransactionCost(t, monedaSeleccionada);
                           const esBonoTransaccion = t.activos?.tipo?.toLowerCase() === 'bono';
                           const ultimoPrecio = monedaSeleccionada === 'ARS' ? t.activos.ultimo_precio_ars : t.activos.ultimo_precio;
-                          const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio : ultimoPrecio) * t.cantidad / (esBonoTransaccion ? 100 : 1);
+                          const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio) * t.cantidad;
                           const rendimientoMontoTransaccion = valorActualTransaccion - costoTransaccion;
                           const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) * 100 : 0;
 

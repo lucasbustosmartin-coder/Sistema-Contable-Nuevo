@@ -3,11 +3,40 @@ import { supabase } from '../../services/supabase';
 import iconImage from '../../assets/icon.png';
 // Quitar la importación de 'react-export-table-to-excel'
 
-// ✅ NUEVO: Importación del componente de la gráfica
+// ✅ Importación del componente de la gráfica
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
+
+// ✅ NUEVOS ICONOS PARA LAS PESTAÑAS
+const tabIcons = {
+  resumen: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 0a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25M3.75 12a2.25 2.25 0 0 1 2.25-2.25h12.75a2.25 2.25 0 0 1 2.25 2.25m-16.5 0v2.25a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25V12" />
+    </svg>
+  ),
+  graficos: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM15.75 6h-6M1.5 12h16.5m-16.5 0a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25M1.5 12a2.25 2.25 0 0 1 2.25-2.25h12.75a2.25 2.25 0 0 1 2.25 2.25m-16.5 0v2.25a2.25 2.25 0 0 0 2.25 2.25h12.75a2.25 2.25 0 0 0 2.25-2.25V12" />
+    </svg>
+  ),
+  tenencia: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v2.25a2.25 2.25 0 0 1-2.25 2.25H6.75a2.25 2.25 0 0 1-2.25-2.25V14.25m15 0a3 3 0 0 0-3-3H8.25a3 3 0 0 0-3 3m15 0v-3a3 3 0 0 0-3-3h-9a3 3 0 0 0-3 3v3m15 0-3-3-3 3" />
+    </svg>
+  ),
+  transacciones: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.28-8.28Z" />
+    </svg>
+  ),
+  brokers: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-1.5-18L19.5 21M5.25 3h13.5m-3-6H8.25m-3.75 3h13.5M9 6v15M15 6v15" />
+    </svg>
+  ),
+};
 
 export default function PortfolioDetail({ portfolioId, user, setCurrentView, selectedCurrency }) {
   const [portfolio, setPortfolio] = useState(null);
@@ -96,10 +125,19 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   }, [user]);
 
+  // ✅ CORRECCIÓN: Filtrar submercados únicos solo de los activos que tienen tenencia
   useEffect(() => {
-    const submarkets = activos.map(a => a.submarket).filter(Boolean);
-    setUniqueSubmarkets([...new Set(submarkets)].sort());
-  }, [activos]);
+    if (transacciones.length > 0) {
+      const holdings = calculatePortfolioMetrics(transacciones).holdings;
+      const submarkets = Object.values(holdings)
+          .filter(holding => holding.cantidad > 0)
+          .map(holding => holding.activoInfo.submarket)
+          .filter(Boolean);
+      setUniqueSubmarkets([...new Set(submarkets)].sort());
+    } else {
+      setUniqueSubmarkets([]);
+    }
+  }, [transacciones, brokers]);
 
   useEffect(() => {
     setMonedaSeleccionada(selectedCurrency);
@@ -756,7 +794,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           { v: t.tipo_operacion.toUpperCase(), t: 's' },
           { v: parseFloat(t.cantidad), t: 'n' },
           { v: t.moneda, t: 's' },
-          { v: getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha) : '-', t: 'n' },
+          { v: getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-', t: 'n' },
           { v: parseFloat(precioUnitario), t: 'n', z: '#,##0.00' },
           { v: parseFloat(costoTransaccion), t: 'n', z: '#,##0.00' },
         ];
@@ -1076,9 +1114,70 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
     ]
   };
+  
+  // ✅ CORRECCIÓN FINAL: Lógica del plugin de texto central con centrado vertical y horizontal preciso.
+  const centerTextPlugin = {
+    id: 'centerText',
+    beforeDraw(chart) {
+      const { ctx, chartArea } = chart;
+      ctx.restore();
 
+      const totalValue = monedaSeleccionada === 'ARS' ? metrics.valorActualArs : metrics.valorActualUsd;
+      let totalValueString;
+
+      if (Math.abs(totalValue) >= 1000) {
+          totalValueString = `${(totalValue / 1000).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} K`;
+      } else {
+          totalValueString = totalValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      const topText = `${monedaSeleccionada} Total`;
+      const bottomText = totalValueString;
+      
+      const chartCenter = {
+          x: chartArea.left + chartArea.width / 2,
+          y: chartArea.top + chartArea.height / 2,
+      };
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const fontTitle = '16px sans-serif';
+      const fontValue = '22px sans-serif';
+      
+      // Mide el texto para un centrado más preciso
+      ctx.font = fontTitle;
+      const topTextMetrics = ctx.measureText(topText);
+      const topTextHeight = topTextMetrics.actualBoundingBoxAscent + topTextMetrics.actualBoundingBoxDescent;
+
+      ctx.font = fontValue;
+      const bottomTextMetrics = ctx.measureText(bottomText);
+      const bottomTextHeight = bottomTextMetrics.actualBoundingBoxAscent + bottomTextMetrics.actualBoundingBoxDescent;
+      
+      const totalTextHeight = topTextHeight + 8 + bottomTextHeight;
+      const startY = chartCenter.y - totalTextHeight / 2;
+
+      ctx.font = fontTitle;
+      ctx.fillStyle = '#6b7280';
+      ctx.fillText(topText, chartCenter.x, startY + topTextHeight / 2);
+
+      ctx.font = fontValue;
+      ctx.fillStyle = '#1f2937';
+      ctx.fillText(bottomText, chartCenter.x, startY + topTextHeight + 8 + bottomTextHeight / 2);
+      
+      ctx.save();
+    },
+  };
+  
   const chartOptions = {
+    cutout: '70%',
     plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          boxWidth: 12,
+        },
+      },
       tooltip: {
         callbacks: {
           label: function(context) {
@@ -1094,7 +1193,14 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   };
   
   const submarketChartOptions = {
+    cutout: '70%',
     plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          boxWidth: 12,
+        },
+      },
       tooltip: {
         callbacks: {
           label: function(context) {
@@ -1213,27 +1319,38 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           <div className="flex space-x-4 border-b border-gray-200">
             <button
               onClick={() => handleViewChange('resumen')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'resumen' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'resumen' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Resumen
+              <span className={`text-gray-500 ${currentSubView === 'resumen' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.resumen}</span>
+              <span>Resumen</span>
+            </button>
+            <button
+              onClick={() => handleViewChange('graficos')}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'graficos' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className={`text-gray-500 ${currentSubView === 'graficos' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.graficos}</span>
+              <span>Gráficos</span>
             </button>
             <button
               onClick={() => handleViewChange('tenencia')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'tenencia' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'tenencia' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Tenencia
+              <span className={`text-gray-500 ${currentSubView === 'tenencia' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.tenencia}</span>
+              <span>Tenencia</span>
             </button>
             <button
               onClick={() => handleViewChange('transacciones')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'transacciones' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'transacciones' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Transacciones
+              <span className={`text-gray-500 ${currentSubView === 'transacciones' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.transacciones}</span>
+              <span>Transacciones</span>
             </button>
             <button
               onClick={() => handleViewChange('brokers')}
-              className={`py-2 px-4 font-medium transition-colors duration-200 ${currentSubView === 'brokers' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`py-2 px-4 font-medium transition-colors duration-200 flex items-center space-x-2 ${currentSubView === 'brokers' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Brókers
+              <span className={`text-gray-500 ${currentSubView === 'brokers' ? 'text-indigo-600' : 'group-hover:text-gray-700'}`}>{tabIcons.brokers}</span>
+              <span>Brókers</span>
             </button>
           </div>
         </div>
@@ -1310,74 +1427,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                   </select>
                 </div>
               </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => {
-                    setShowChart(!showChart);
-                    setShowSubmarketChart(false);
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                    showChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-                  } flex items-center space-x-2`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
-                  </svg>
-                  <span>{showChart ? 'Ocultar por Activo' : 'Ver por Activo'}</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowSubmarketChart(!showSubmarketChart);
-                    setShowChart(false);
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                    showSubmarketChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-                  } flex items-center space-x-2`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
-                  </svg>
-                  <span>{showSubmarketChart ? 'Ocultar por Submercado' : 'Ver por Submercado'}</span>
-                </button>
-              </div>
             </div>
-            
-            {showChart && resumenHoldingsToDisplay.length > 0 && (
-              <div className="bg-gray-50 p-6 rounded-lg shadow-inner mb-6 flex flex-col items-center">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
-                <div className="w-full max-w-lg">
-                  <Doughnut data={chartData} options={chartOptions} />
-                </div>
-              </div>
-            )}
-            
-            {showSubmarketChart && resumenHoldingsToDisplay.length > 0 && (
-              <div className="bg-gray-50 p-6 rounded-lg shadow-inner mb-6 flex flex-col items-center">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
-                <div className="w-full max-w-lg">
-                  <Doughnut data={submarketChartData} options={submarketChartOptions} />
-                </div>
-              </div>
-            )}
-            
-            {(showChart || showSubmarketChart) && resumenHoldingsToDisplay.length === 0 && (
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mb-6">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fillRule="evenodd" d="M8.257 3.518A8.96 8.96 0 0112 2.25c3.07 0 5.825 1.488 7.5 3.75a8.96 8.96 0 01-3.75 5.25c-.274-.294-.582-.55-.916-.77A5.992 5.992 0 0012 8.25a5.992 5.992 0 00-4.043 1.455c-.334.22-.642.476-.916.77a8.96 8.96 0 01-3.75-5.25c1.675-2.262 4.43-3.75 7.5-3.75zm1.53 10.96a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zm0 10.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-yellow-800">No hay datos para mostrar</h3>
-                    <div className="mt-2 text-sm text-yellow-700">
-                      <p>Para ver la distribución de tu portafolio, necesitas tener activos con un valor actual mayor a cero.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-gray-50 rounded-lg p-4">
@@ -1496,6 +1546,64 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {currentSubView === 'graficos' && (
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Gráficos del Portafolio</h3>
+              <div className="bg-gray-200 rounded-full p-1 flex items-center">
+                <button
+                  onClick={() => setMonedaSeleccionada('ARS')}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                >
+                  ARS
+                </button>
+                <button
+                  onClick={() => setMonedaSeleccionada('USD')}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                >
+                  USD
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col md:flex-row space-y-8 md:space-y-0 md:space-x-8">
+              {/* Gráfico de Distribución por Activo */}
+              <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
+                <div className="w-full max-w-lg relative" key={`asset-chart-${monedaSeleccionada}`}>
+                  <Doughnut data={chartData} options={chartOptions} plugins={[centerTextPlugin]} />
+                </div>
+              </div>
+
+              {/* Gráfico de Distribución por Submercado */}
+              <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
+                <div className="w-full max-w-lg relative" key={`submarket-chart-${monedaSeleccionada}`}>
+                  <Doughnut data={submarketChartData} options={submarketChartOptions} plugins={[centerTextPlugin]} />
+                </div>
+              </div>
+            </div>
+
+            {resumenHoldingsToDisplay.length === 0 && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mt-6">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M8.257 3.518A8.96 8.96 0 0112 2.25c3.07 0 5.825 1.488 7.5 3.75a8.96 8.96 0 01-3.75 5.25c-.274-.294-.582-.55-.916-.77A5.992 5.992 0 0012 8.25a5.992 5.992 0 00-4.043 1.455c-.334.22-.642.476-.916.77a8.96 8.96 0 01-3.75-5.25c1.675-2.262 4.43-3.75 7.5-3.75zm1.53 10.96a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zm0 10.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-yellow-800">No hay datos para mostrar</h3>
+                    <div className="mt-2 text-sm text-yellow-700">
+                      <p>Para ver la distribución de tu portafolio, necesitas tener activos con un valor actual mayor a cero.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
