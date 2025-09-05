@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import iconImage from '../assets/icon.png';
 
-// ✅ Nuevos props: updateMessage y setUpdateMessage
 export default function ActivosManager({ user, setCurrentView, updateMessage, setUpdateMessage }) {
   const [activos, setActivos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,19 +15,18 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
     tipo: '',
     simbolo: '',
     nombre: '',
-    moneda: ''
+    moneda: '',
+    submarket: ''
   });
   const [formError, setFormError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [tipoCambioDisplay, setTipoCambioDisplay] = useState(null);
   
-  // ✅ NUEVO: Estado para el ordenamiento de la tabla
   const [sortConfig, setSortConfig] = useState({ key: 'simbolo', direction: 'ascending' });
 
   const tipos = ['accion', 'cedear', 'etf', 'bono'];
   const monedas = ['ARS', 'USD'];
 
-  // ✅ Recarga activos y el tipo de cambio cuando se recibe un mensaje de actualización
   useEffect(() => {
     loadActivos();
     loadLatestTipoCambio();
@@ -46,7 +44,6 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
       const { data, error: fetchError } = await supabase
         .from('activos')
         .select('*, ultimo_precio, ultimo_precio_ars, fecha_actualizacion')
-        .eq('usuario_id', user.id)
         .order('tipo', { ascending: true })
         .order('simbolo', { ascending: true });
 
@@ -84,11 +81,12 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
         tipo: activo.tipo,
         simbolo: activo.simbolo,
         nombre: activo.nombre,
-        moneda: activo.moneda
+        moneda: activo.moneda,
+        submarket: activo.submarket || ''
       });
     } else {
       setEditing(null);
-      setFormData({ tipo: '', simbolo: '', nombre: '', moneda: '' });
+      setFormData({ tipo: '', simbolo: '', nombre: '', moneda: '', submarket: '' });
     }
     setFormError('');
     setShowModal(true);
@@ -97,7 +95,7 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
-    setFormData({ tipo: '', simbolo: '', nombre: '', moneda: '' });
+    setFormData({ tipo: '', simbolo: '', nombre: '', moneda: '', submarket: '' });
     setFormError('');
   };
 
@@ -116,37 +114,35 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    const { tipo, simbolo, nombre, moneda } = formData;
+      e.preventDefault();
+      const { tipo, simbolo, nombre, moneda, submarket } = formData;
 
-    if (!tipo || !simbolo || !nombre || !moneda) {
-      setFormError('Todos los campos son obligatorios');
-      return;
-    }
+      if (!tipo || !simbolo || !nombre || !moneda || !submarket) {
+        setFormError('Todos los campos son obligatorios');
+        return;
+      }
 
     try {
       if (editing) {
         const { error: updateError } = await supabase
           .from('activos')
-          .update({ tipo, simbolo, nombre, moneda })
-          .eq('id', editing.id)
-          .eq('usuario_id', user.id);
-
+          .update({ tipo, simbolo, nombre, moneda, submarket })
+          // ✅ CORRECCIÓN: Se eliminó el filtro por usuario_id
+          .eq('id', editing.id);
         if (updateError) throw updateError;
       } else {
         const { error: insertError } = await supabase
           .from('activos')
           .insert({
-            usuario_id: user.id,
+            // ✅ CORRECCIÓN: Se eliminó usuario_id de la inserción
             tipo,
             simbolo: simbolo.toUpperCase(),
             nombre,
-            moneda
+            moneda,
+            submarket
           });
-
         if (insertError) throw insertError;
       }
-
       await loadActivos();
       closeModal();
       setUpdateMessage({ type: 'success', text: editing ? 'Activo actualizado con éxito.' : 'Activo creado con éxito.' });
@@ -165,8 +161,8 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
       const { error: deleteError } = await supabase
         .from('activos')
         .delete()
-        .eq('id', itemToDelete)
-        .eq('usuario_id', user.id);
+        // ✅ CORRECCIÓN: Se eliminó el filtro por usuario_id
+        .eq('id', itemToDelete);
 
       if (deleteError) throw deleteError;
 
@@ -214,7 +210,6 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
     }
   };
   
-  // ✅ NUEVA FUNCIÓN: Lógica de ordenamiento
   const requestSort = (key) => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -223,7 +218,6 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
     setSortConfig({ key, direction });
   };
   
-  // ✅ NUEVA FUNCIÓN: Devuelve los activos ordenados
   const sortedActivos = () => {
     const sortableItems = [...activos];
     if (sortConfig.key !== null) {
@@ -237,8 +231,8 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
           valueA = a.fecha_actualizacion ? new Date(a.fecha_actualizacion) : new Date(0);
           valueB = b.fecha_actualizacion ? new Date(b.fecha_actualizacion) : new Date(0);
         } else {
-          valueA = a[sortConfig.key].toLowerCase();
-          valueB = b[sortConfig.key].toLowerCase();
+          valueA = (a[sortConfig.key] || '').toLowerCase();
+          valueB = (b[sortConfig.key] || '').toLowerCase();
         }
 
         if (valueA < valueB) {
@@ -345,6 +339,22 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                           </span>
                         )}
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('submarket')}>
+                        Submarket
+                        {sortConfig.key === 'submarket' && (
+                          <span className="ml-1">
+                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('moneda')}>
+                        Moneda
+                        {sortConfig.key === 'moneda' && (
+                          <span className="ml-1">
+                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('ultimo_precio')}>
                         Precio USD
                         {sortConfig.key === 'ultimo_precio' && (
@@ -378,6 +388,8 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                         <tr key={activo.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">{activo.tipo}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{activo.simbolo}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">{activo.submarket}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{activo.moneda}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {activo.ultimo_precio ? `$${activo.ultimo_precio?.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}` : <span className="text-gray-400">Sin datos</span>}
                           </td>
@@ -405,7 +417,7 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
                           No tenés activos registrados.
                         </td>
                       </tr>
@@ -494,6 +506,20 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                     ))}
                   </select>
                 </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Submarket</label>
+                  <input
+                    type="text"
+                    name="submarket"
+                    value={formData.submarket}
+                    onChange={handleInputChange}
+                    placeholder="Ej: BYMA"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+                
               </div>
 
               <div className="flex justify-end space-x-3 mt-6">
