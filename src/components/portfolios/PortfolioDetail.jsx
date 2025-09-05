@@ -3,6 +3,12 @@ import { supabase } from '../../services/supabase';
 import iconImage from '../../assets/icon.png';
 // Quitar la importación de 'react-export-table-to-excel'
 
+// ✅ NUEVO: Importación del componente de la gráfica
+import { Doughnut } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
 export default function PortfolioDetail({ portfolioId, user, setCurrentView, selectedCurrency }) {
   const [portfolio, setPortfolio] = useState(null);
   const [portfolios, setPortfolios] = useState([]); // ✅ NUEVO: Estado para guardar la lista de todas las carteras
@@ -55,6 +61,11 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     porcentaje: null,
     tendencia: null,
   });
+
+  // ✅ NUEVO: Estado para controlar la visibilidad de la gráfica
+  const [showChart, setShowChart] = useState(false);
+  // ✅ NUEVO: Estado para controlar la visibilidad de la gráfica por submarket
+  const [showSubmarketChart, setShowSubmarketChart] = useState(false);
 
 
   useEffect(() => {
@@ -258,7 +269,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       
       const { data: transaccionesData, error: transaccionesError } = await supabase
         .from('transacciones')
-        .select('*, activos(id, simbolo, nombre, moneda, tipo, ultimo_precio, ultimo_precio_ars), brokers(nombre, cuenta_comitente)')
+        .select('*, activos(id, simbolo, nombre, moneda, tipo, ultimo_precio, ultimo_precio_ars, submarket), brokers(nombre, cuenta_comitente)')
         .eq('portafolio_id', currentPortfolioId);
 
       if (transaccionesError) {
@@ -1024,6 +1035,97 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
 
+  // ✅ NUEVO: Lógica para preparar los datos de la gráfica de distribución por activo
+  const chartData = {
+    labels: resumenHoldingsToDisplay.map(h => `${h.activoInfo.simbolo} (${h.activoInfo.nombre})`),
+    datasets: [
+      {
+        label: 'Distribución por Activo',
+        data: resumenHoldingsToDisplay.map(h => {
+            const esBono = h.activoInfo?.tipo?.toLowerCase() === 'bono';
+            const valor = monedaSeleccionada === 'ARS'
+                ? (esBono ? h.cantidad * h.activoInfo.ultimo_precio_ars / 100 : h.cantidad * h.activoInfo.ultimo_precio_ars)
+                : (esBono ? h.cantidad * h.activoInfo.ultimo_precio / 100 : h.cantidad * h.activoInfo.ultimo_precio);
+            return valor;
+        }),
+        backgroundColor: [
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED'
+        ],
+        hoverOffset: 4
+      }
+    ]
+  };
+
+  // ✅ NUEVO: Lógica para preparar los datos de la gráfica por submarket
+  const submarketHoldings = resumenHoldingsToDisplay.reduce((acc, holding) => {
+    const submarket = holding.activoInfo.submarket || 'Sin submercado';
+    const esBono = holding.activoInfo?.tipo?.toLowerCase() === 'bono';
+    const valor = monedaSeleccionada === 'ARS'
+        ? (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio_ars / 100 : holding.cantidad * holding.activoInfo.ultimo_precio_ars)
+        : (esBono ? holding.cantidad * holding.activoInfo.ultimo_precio / 100 : holding.cantidad * holding.activoInfo.ultimo_precio);
+    
+    if (acc[submarket]) {
+      acc[submarket] += valor;
+    } else {
+      acc[submarket] = valor;
+    }
+    return acc;
+  }, {});
+
+  const submarketChartData = {
+    labels: Object.keys(submarketHoldings),
+    datasets: [
+      {
+        label: 'Distribución por Submercado',
+        data: Object.values(submarketHoldings),
+        backgroundColor: [
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED'
+        ],
+        hoverOffset: 4
+      }
+    ]
+  };
+
+  // ✅ NUEVO: Lógica para mostrar los porcentajes en los tooltips de los gráficos
+  const chartOptions = {
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(2) + '%' : '0.00%';
+            return `${label}: ${value.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })} (${percentage})`;
+          }
+        }
+      }
+    }
+  };
+  
+  // ✅ NUEVO: Lógica para mostrar los porcentajes en los tooltips del gráfico de submercado
+  const submarketChartOptions = {
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(2) + '%' : '0.00%';
+            return `${label}: ${value.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })} (${percentage})`;
+          }
+        }
+      }
+    }
+  };
+
 
   if (loading) {
     return (
@@ -1072,7 +1174,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
             <img src={iconImage} alt="Gestión Patrimonial Icono" className="h-8 w-8 object-contain" />
             <span className="text-xl font-bold text-indigo-600">Gestión Patrimonial</span>
           </div>
-          {/* ✅ CÓDIGO MODIFICADO: CARD del Dólar MEP con nuevo formato y estilo */}
           {dolarMep.valor && (
             <div className="flex items-center space-x-2 py-2 px-4 bg-white rounded-lg shadow-sm border border-gray-200 text-sm font-semibold">
               <span className="text-gray-600">Dólar MEP:</span>
@@ -1208,6 +1309,78 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                 </div>
               </div>
             </div>
+            
+            {/* ✅ NUEVO: Botones para mostrar/ocultar los gráficos */}
+            <div className="flex justify-end mb-4 space-x-2">
+              <button
+                onClick={() => {
+                  setShowChart(!showChart);
+                  setShowSubmarketChart(false);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                  showChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                } flex items-center space-x-2`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
+                </svg>
+                <span>{showChart ? 'Ocultar por Activo' : 'Ver por Activo'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowSubmarketChart(!showSubmarketChart);
+                  setShowChart(false);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                  showSubmarketChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                } flex items-center space-x-2`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
+                </svg>
+                <span>{showSubmarketChart ? 'Ocultar por Submercado' : 'Ver por Submercado'}</span>
+              </button>
+            </div>
+            
+            {/* ✅ NUEVO: Lógica para mostrar la gráfica por activo */}
+            {showChart && resumenHoldingsToDisplay.length > 0 && (
+              <div className="bg-gray-50 p-6 rounded-lg shadow-inner mb-6 flex flex-col items-center">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
+                <div className="w-full max-w-lg">
+                  <Doughnut data={chartData} options={chartOptions} />
+                </div>
+              </div>
+            )}
+            
+            {/* ✅ NUEVO: Lógica para mostrar la gráfica por submercado */}
+            {showSubmarketChart && resumenHoldingsToDisplay.length > 0 && (
+              <div className="bg-gray-50 p-6 rounded-lg shadow-inner mb-6 flex flex-col items-center">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
+                <div className="w-full max-w-lg">
+                  <Doughnut data={submarketChartData} options={submarketChartOptions} />
+                </div>
+              </div>
+            )}
+            
+            {/* ✅ NUEVO: Mensaje para gráficos sin datos */}
+            {(showChart || showSubmarketChart) && resumenHoldingsToDisplay.length === 0 && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mb-6">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M8.257 3.518A8.96 8.96 0 0112 2.25c3.07 0 5.825 1.488 7.5 3.75a8.96 8.96 0 01-3.75 5.25c-.274-.294-.582-.55-.916-.77A5.992 5.992 0 0012 8.25a5.992 5.992 0 00-4.043 1.455c-.334.22-.642.476-.916.77a8.96 8.96 0 01-3.75-5.25c1.675-2.262 4.43-3.75 7.5-3.75zm1.53 10.96a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zm0 10.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-yellow-800">No hay datos para mostrar</h3>
+                    <div className="mt-2 text-sm text-yellow-700">
+                      <p>Para ver la distribución de tu portafolio, necesitas tener activos con un valor actual mayor a cero.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-gray-50 rounded-lg p-4">
