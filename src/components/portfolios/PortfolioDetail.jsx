@@ -46,15 +46,16 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   const [brokerFormError, setBrokerFormError] = useState('');
   
   const [brokerFilter, setBrokerFilter] = useState('todos');
+  const [submarketFilter, setSubmarketFilter] = useState('todos');
+  const [uniqueSubmarkets, setUniqueSubmarkets] = useState([]);
   
   const [cantidadDisponible, setCantidadDisponible] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState(null);
   
-  const [currentPortfolioId, setCurrentPortfolioId] = useState(portfolioId); // ✅ NUEVO: Estado para la ID de la cartera actual
-  const [activos, setActivos] = useState([]); // ✅ CORREGIDO: Declaración del estado 'activos'
+  const [currentPortfolioId, setCurrentPortfolioId] = useState(portfolioId);
+  const [activos, setActivos] = useState([]);
   
-  // ✅ NUEVO: Estado para el valor del dólar MEP y su variación
   const [dolarMep, setDolarMep] = useState({
     valor: null,
     variacion: null,
@@ -62,9 +63,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     tendencia: null,
   });
 
-  // ✅ NUEVO: Estado para controlar la visibilidad de la gráfica
   const [showChart, setShowChart] = useState(false);
-  // ✅ NUEVO: Estado para controlar la visibilidad de la gráfica por submarket
   const [showSubmarketChart, setShowSubmarketChart] = useState(false);
 
 
@@ -81,7 +80,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return () => document.head.removeChild(script);
   }, []);
 
-  // ✅ MODIFICADO: Ahora depende de `currentPortfolioId`
   useEffect(() => {
     if (user && currentPortfolioId) {
       fetchPortfolioDetails();
@@ -93,23 +91,27 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   
   useEffect(() => {
     if (user) {
-      fetchAllPortfolios(); // ✅ NUEVO: Cargar todas las carteras al inicio
-      fetchMepPrice(); // ✅ NUEVO: Cargar el precio del MEP al inicio
+      fetchAllPortfolios();
+      fetchMepPrice();
     }
   }, [user]);
+
+  useEffect(() => {
+    const submarkets = activos.map(a => a.submarket).filter(Boolean);
+    setUniqueSubmarkets([...new Set(submarkets)].sort());
+  }, [activos]);
 
   useEffect(() => {
     setMonedaSeleccionada(selectedCurrency);
     setMonedaSeleccionadaTransacciones(selectedCurrency);
   }, [selectedCurrency]);
   
-  // ✅ NUEVO: Función para obtener el precio del dólar MEP y calcular la variación
   const fetchMepPrice = async () => {
     try {
       const { data, error } = await supabase
         .from('tipos_cambio')
         .select('fecha, tasa')
-        .order('fecha', { ascending: false }) // Obtener los últimos 2 registros
+        .order('fecha', { ascending: false })
         .limit(2);
 
       if (error) throw error;
@@ -146,7 +148,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
 
-  // ✅ NUEVO: Función para obtener todas las carteras del usuario
   const fetchAllPortfolios = async () => {
     try {
       const { data, error } = await supabase
@@ -160,7 +161,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
   
-  // ✅ MODIFICADO: Usa `currentPortfolioId` en lugar de `portfolioId`
   const handleFullUpdate = async () => {
     setIsUpdating(true);
     try {
@@ -239,7 +239,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     } finally {
       fetchPortfolioDetails();
       fetchTiposCambio();
-      fetchMepPrice(); // ✅ NUEVO: Volver a buscar el precio del MEP después de la actualización
+      fetchMepPrice();
       setIsUpdating(false);
       setTimeout(() => setUpdateMessage(null), 5000);
     }
@@ -289,8 +289,8 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     try {
       const { data, error } = await supabase
         .from('activos')
-        .select('id, nombre, simbolo, tipo, moneda, ultimo_precio, ultimo_precio_ars')
-        .order('simbolo', { ascending: true }); // ✅ MODIFICADO: ordenar por símbolo
+        .select('id, nombre, simbolo, tipo, moneda, ultimo_precio, ultimo_precio_ars, submarket')
+        .order('simbolo', { ascending: true });
       if (error) throw error;
       setActivos(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -357,7 +357,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       moneda: transaction.moneda,
       broker_id: transaction.broker_id || '',
     });
-    const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter).holdings;
+    const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter).holdings;
     const disponible = currentHoldings[transaction.activo_id]?.brokers[transaction.broker_id]?.cantidad || 0;
     setCantidadDisponible(disponible);
     setShowAddTransactionModal(true);
@@ -372,7 +372,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
       
       if (newTransaction.tipo_operacion === 'venta') {
-        const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter).holdings;
+        const currentHoldings = calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter).holdings;
         const holdingPorBroker = currentHoldings[newTransaction.activo_id]?.brokers[newTransaction.broker_id]?.cantidad || 0;
         
         if (parseFloat(newTransaction.cantidad) > holdingPorBroker) {
@@ -397,7 +397,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         precio_unitario: parseFloat(newTransaction.precio_unitario),
         fecha: newTransaction.fecha,
         moneda: newTransaction.moneda,
-        portafolio_id: currentPortfolioId, // ✅ MODIFICADO: Usa `currentPortfolioId`
+        portafolio_id: currentPortfolioId,
         broker_id: newTransaction.broker_id,
       };
 
@@ -476,15 +476,14 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return value;
   };
   
-  // ✅ CORREGIDO: Lógica de cálculo con FIFO
-  const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos') => {
-    const filteredTransactions = brokerFilter === 'todos'
-      ? transacciones
-      : transacciones.filter(t => t.broker_id === brokerFilter);
-      
-    const holdings = {};
+  const calculatePortfolioMetrics = (transacciones, brokerFilter = 'todos', submarketFilter = 'todos') => {
+    const filteredTransactions = transacciones.filter(t => {
+      const isBrokerMatch = brokerFilter === 'todos' || t.broker_id === brokerFilter;
+      const isSubmarketMatch = submarketFilter === 'todos' || (t.activos && t.activos.submarket === submarketFilter);
+      return isBrokerMatch && isSubmarketMatch;
+    });
 
-    // Ordenar transacciones por fecha de forma ascendente
+    const holdings = {};
     filteredTransactions.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
     filteredTransactions.forEach(t => {
@@ -496,7 +495,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           costo_total_usd: 0,
           activoInfo: t.activos,
           brokers: {},
-          compras: [] // Almacenará las compras abiertas de este activo
+          compras: []
         };
       }
       
@@ -528,11 +527,9 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
           costo_unitario_usd: costoUnitarioUsd,
           broker_id: brokerId,
         });
-        
       } else if (t.tipo_operacion === 'venta') {
         let cantidadPendiente = cantidad;
         
-        // Procesa las ventas contra las compras más antiguas (FIFO)
         for (let i = 0; i < holdings[activoId].compras.length && cantidadPendiente > 0; i++) {
           const compra = holdings[activoId].compras[i];
           if (compra.cantidad_restante > 0) {
@@ -544,7 +541,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       }
     });
 
-    // Calcular la cantidad final y el costo total a partir de las compras restantes
     for (const activoId in holdings) {
       const holding = holdings[activoId];
       holding.cantidad = 0;
@@ -576,7 +572,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       holding.valor_actual_usd = valorUsd;
     }
     
-    // Calcular los totales del portafolio
     let valorActualArs = 0;
     let valorActualUsd = 0;
     let costoTotalArs = 0;
@@ -641,8 +636,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     return broker ? broker.nombre : 'N/A';
   };
   
-  // ✅ MODIFICADO: Se declara metrics una sola vez
-  const metrics = calculatePortfolioMetrics(transacciones, brokerFilter);
+  const metrics = calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter);
 
   const handleExportTenencias = async () => {
     if (!isXLSXLoaded) {
@@ -661,7 +655,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     setIsExporting(true);
 
     try {
-      // ✅ MODIFICADO: Añadir nuevos encabezados para precio de compra y precio actual
       const headers = [
         'Activo',
         'Bróker',
@@ -685,18 +678,14 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) : 0;
         
         const precioUnitario = getTransactionPrice(t, monedaSeleccionada);
-        // ✅ NUEVO: Lógica para calcular el precio actual unitario
         const precioActualUnitario = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio);
 
-        // ✅ MODIFICADO: Se agrega el precio de compra y el precio actual
         return [
           { v: `${t.activos.nombre} (${t.activos.simbolo})`, t: 's' },
           { v: getBrokerNameById(t.broker_id), t: 's' },
           { v: formatDate(t.fecha), t: 's' },
           { v: parseFloat(t.cantidad), t: 'n' },
-          // ✅ NUEVO: Agregar precio de compra con formato condicional
           { v: parseFloat(precioUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
-          // ✅ NUEVO: Agregar precio actual con formato condicional
           { v: parseFloat(precioActualUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
           { v: parseFloat(costoTransaccion), t: 'n', z: '#,##0.00' },
           { v: parseFloat(valorActualTransaccion), t: 'n', z: '#,##0.00' },
@@ -709,7 +698,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
       window.XLSX.utils.sheet_add_aoa(ws, [headers]);
       window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
 
-      // ✅ MODIFICADO: Se ajustan los anchos de columna para los nuevos campos
       ws['!cols'] = [
         { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, 
         { wch: 25 }, { wch: 25 }, 
@@ -871,8 +859,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
   const transactionsToDisplay = sortedTransacciones();
 
   const sortedResumenHoldings = () => {
-    // ✅ MODIFICADO: Se pasa 'transacciones' a la función de cálculo
-    const holdings = Object.values(calculatePortfolioMetrics(transacciones, brokerFilter).holdings);
+    const holdings = Object.values(calculatePortfolioMetrics(transacciones, brokerFilter, submarketFilter).holdings);
     const sortableItems = holdings.filter(holding => holding.cantidad > 0);
     
     if (sortResumenConfig.key !== null) {
@@ -1035,7 +1022,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
 
-  // ✅ NUEVO: Lógica para preparar los datos de la gráfica de distribución por activo
   const chartData = {
     labels: resumenHoldingsToDisplay.map(h => `${h.activoInfo.simbolo} (${h.activoInfo.nombre})`),
     datasets: [
@@ -1059,7 +1045,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     ]
   };
 
-  // ✅ NUEVO: Lógica para preparar los datos de la gráfica por submarket
   const submarketHoldings = resumenHoldingsToDisplay.reduce((acc, holding) => {
     const submarket = holding.activoInfo.submarket || 'Sin submercado';
     const esBono = holding.activoInfo?.tipo?.toLowerCase() === 'bono';
@@ -1092,7 +1077,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     ]
   };
 
-  // ✅ NUEVO: Lógica para mostrar los porcentajes en los tooltips de los gráficos
   const chartOptions = {
     plugins: {
       tooltip: {
@@ -1109,7 +1093,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     }
   };
   
-  // ✅ NUEVO: Lógica para mostrar los porcentajes en los tooltips del gráfico de submercado
   const submarketChartOptions = {
     plugins: {
       tooltip: {
@@ -1279,20 +1262,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                   )}
                   <span>Actualizar precios</span>
                 </button>
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="broker-filter" className="text-sm font-medium text-gray-600">Ver por Bróker:</label>
-                  <select
-                    id="broker-filter"
-                    value={brokerFilter}
-                    onChange={(e) => setBrokerFilter(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="todos">Todos</option>
-                    {brokers.map(broker => (
-                      <option key={broker.id} value={broker.id}>{broker.nombre}</option>
-                    ))}
-                  </select>
-                </div>
                 <div className="bg-gray-200 rounded-full p-1 flex items-center">
                   <button
                     onClick={() => setMonedaSeleccionada('ARS')}
@@ -1310,39 +1279,69 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
               </div>
             </div>
             
-            {/* ✅ NUEVO: Botones para mostrar/ocultar los gráficos */}
-            <div className="flex justify-end mb-4 space-x-2">
-              <button
-                onClick={() => {
-                  setShowChart(!showChart);
-                  setShowSubmarketChart(false);
-                }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                  showChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-                } flex items-center space-x-2`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
-                </svg>
-                <span>{showChart ? 'Ocultar por Activo' : 'Ver por Activo'}</span>
-              </button>
-              <button
-                onClick={() => {
-                  setShowSubmarketChart(!showSubmarketChart);
-                  setShowChart(false);
-                }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                  showSubmarketChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-                } flex items-center space-x-2`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
-                </svg>
-                <span>{showSubmarketChart ? 'Ocultar por Submercado' : 'Ver por Submercado'}</span>
-              </button>
+            <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-6 items-end justify-between">
+              <div className="flex space-x-4 w-full md:w-auto">
+                <div className="w-1/2 md:w-auto">
+                  <label htmlFor="broker-filter" className="block text-sm font-medium text-gray-700 mb-1">Bróker</label>
+                  <select
+                    id="broker-filter"
+                    value={brokerFilter}
+                    onChange={(e) => setBrokerFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="todos">Todos</option>
+                    {brokers.map(broker => (
+                      <option key={broker.id} value={broker.id}>{broker.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-1/2 md:w-auto">
+                  <label htmlFor="submarket-filter" className="block text-sm font-medium text-gray-700 mb-1">Submercado</label>
+                  <select
+                    id="submarket-filter"
+                    value={submarketFilter}
+                    onChange={(e) => setSubmarketFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="todos">Todos</option>
+                    {uniqueSubmarkets.map(submarket => (
+                      <option key={submarket} value={submarket}>{submarket}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => {
+                    setShowChart(!showChart);
+                    setShowSubmarketChart(false);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                    showChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                  } flex items-center space-x-2`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
+                  </svg>
+                  <span>{showChart ? 'Ocultar por Activo' : 'Ver por Activo'}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSubmarketChart(!showSubmarketChart);
+                    setShowChart(false);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                    showSubmarketChart ? 'bg-indigo-700 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                  } flex items-center space-x-2`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM12 2.25v2.25m3.75 3.75h-3.75h3.75z" />
+                  </svg>
+                  <span>{showSubmarketChart ? 'Ocultar por Submercado' : 'Ver por Submercado'}</span>
+                </button>
+              </div>
             </div>
             
-            {/* ✅ NUEVO: Lógica para mostrar la gráfica por activo */}
             {showChart && resumenHoldingsToDisplay.length > 0 && (
               <div className="bg-gray-50 p-6 rounded-lg shadow-inner mb-6 flex flex-col items-center">
                 <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
@@ -1352,7 +1351,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
               </div>
             )}
             
-            {/* ✅ NUEVO: Lógica para mostrar la gráfica por submercado */}
             {showSubmarketChart && resumenHoldingsToDisplay.length > 0 && (
               <div className="bg-gray-50 p-6 rounded-lg shadow-inner mb-6 flex flex-col items-center">
                 <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
@@ -1362,7 +1360,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
               </div>
             )}
             
-            {/* ✅ NUEVO: Mensaje para gráficos sin datos */}
             {(showChart || showSubmarketChart) && resumenHoldingsToDisplay.length === 0 && (
               <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mb-6">
                 <div className="flex">

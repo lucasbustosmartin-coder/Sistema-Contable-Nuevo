@@ -24,6 +24,10 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
   
   const [sortConfig, setSortConfig] = useState({ key: 'simbolo', direction: 'ascending' });
 
+  // ✅ NUEVOS ESTADOS PARA FILTROS
+  const [filterTipo, setFilterTipo] = useState('');
+  const [filterSimbolo, setFilterSimbolo] = useState('');
+
   const tipos = ['accion', 'cedear', 'etf', 'bono'];
   const monedas = ['ARS', 'USD'];
 
@@ -219,7 +223,16 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
   };
   
   const sortedActivos = () => {
-    const sortableItems = [...activos];
+    let sortableItems = [...activos];
+
+    // ✅ NUEVA LÓGICA DE FILTRADO
+    if (filterTipo) {
+      sortableItems = sortableItems.filter(activo => activo.tipo === filterTipo);
+    }
+    if (filterSimbolo) {
+      sortableItems = sortableItems.filter(activo => activo.simbolo.toLowerCase().includes(filterSimbolo.toLowerCase()));
+    }
+
     if (sortConfig.key !== null) {
       sortableItems.sort((a, b) => {
         let valueA, valueB;
@@ -319,6 +332,37 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                 </div>
               </div>
 
+              {/* ✅ NUEVOS FILTROS */}
+              <div className="p-6 bg-gray-100 border-t border-gray-200 flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                <div className="flex-1">
+                  <label htmlFor="filter-tipo" className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Tipo</label>
+                  <select
+                    id="filter-tipo"
+                    value={filterTipo}
+                    onChange={(e) => setFilterTipo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Todos</option>
+                    {tipos.map((t) => (
+                      <option key={t} value={t}>
+                        {t === 'accion' ? 'Acción' : t === 'cedear' ? 'Cedear' : t === 'etf' ? 'ETF' : 'Bono'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="filter-simbolo" className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Ticker</label>
+                  <input
+                    type="text"
+                    id="filter-simbolo"
+                    value={filterSimbolo}
+                    onChange={(e) => setFilterSimbolo(e.target.value)}
+                    placeholder="Ej: GGAL"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-10">
@@ -332,7 +376,7 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                         )}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('simbolo')}>
-                        Símbolo
+                        Ticker
                         {sortConfig.key === 'simbolo' && (
                           <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? '▲' : '▼'}
@@ -464,7 +508,7 @@ export default function ActivosManager({ user, setCurrentView, updateMessage, se
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Símbolo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ticker</label>
                   <input
                     type="text"
                     name="simbolo"
