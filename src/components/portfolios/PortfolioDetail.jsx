@@ -11,7 +11,7 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 export default function PortfolioDetail({ portfolioId, user, setCurrentView, selectedCurrency }) {
   const [portfolio, setPortfolio] = useState(null);
-  const [portfolios, setPortfolios] = useState([]); // ✅ NUEVO: Estado para guardar la lista de todas las carteras
+  const [portfolios, setPortfolios] = useState([]);
   const [transacciones, setTransacciones] = useState([]);
   const [tiposCambio, setTiposCambio] = useState([]);
   const [brokers, setBrokers] = useState([]);
@@ -1240,7 +1240,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
 
         {currentSubView === 'resumen' && (
           <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800">Resumen del Portafolio</h3>
               <div className="flex items-center space-x-4">
                 <button
