@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
 import iconImage from '../../assets/icon.png';
-// Quitar la importación de 'react-export-table-to-excel'
+// Importación de la librería XLSX
+import * as XLSX from 'xlsx';
 
 // ✅ Importación del componente de la gráfica
 import { Doughnut } from 'react-chartjs-2';
@@ -721,7 +722,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         return [
           { v: `${t.activos.nombre} (${t.activos.simbolo})`, t: 's' },
           { v: getBrokerNameById(t.broker_id), t: 's' },
-          { v: formatDate(t.fecha), t: 's' },
+          { v: t.fecha, t: 's' }, // ✅ Corregido para exportar como cadena
           { v: parseFloat(t.cantidad), t: 'n' },
           { v: parseFloat(precioUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
           { v: parseFloat(precioActualUnitario), t: 'n', z: monedaSeleccionada === 'USD' ? '#,##0.0000' : '#,##0.00' },
@@ -732,9 +733,11 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         ];
       });
 
-      const ws = window.XLSX.utils.aoa_to_sheet([]);
-      window.XLSX.utils.sheet_add_aoa(ws, [headers]);
-      window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+      const ws = XLSX.utils.aoa_to_sheet([]);
+      XLSX.utils.sheet_add_aoa(ws, [headers]);
+      XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+
+      // ✅ El bloque de corrección de fecha se elimina para usar el método de ExcelExporterManager
 
       ws['!cols'] = [
         { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, 
@@ -742,11 +745,11 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }
       ];
 
-      const wb = window.XLSX.utils.book_new();
-      window.XLSX.utils.book_append_sheet(wb, ws, "Detalle de Compras");
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Detalle de Compras");
       
       const filename = `Detalle_Tenencia_${portfolio.name.replace(/\s/g, '_')}.xlsx`;
-      window.XLSX.writeFile(wb, filename);
+      XLSX.writeFile(wb, filename);
 
     } catch (err) {
       console.error("Error al exportar a Excel:", err);
@@ -790,19 +793,21 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         return [
           { v: `${t.activos.nombre} (${t.activos.simbolo})`, t: 's' },
           { v: t.brokers?.nombre || '-', t: 's' },
-          { v: formatDate(t.fecha), t: 's' },
+          { v: t.fecha, t: 's' }, // ✅ Corregido para exportar como cadena
           { v: t.tipo_operacion.toUpperCase(), t: 's' },
           { v: parseFloat(t.cantidad), t: 'n' },
           { v: t.moneda, t: 's' },
-          { v: getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-', t: 'n' },
+          { v: getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha) : '-', t: 'n' },
           { v: parseFloat(precioUnitario), t: 'n', z: '#,##0.00' },
           { v: parseFloat(costoTransaccion), t: 'n', z: '#,##0.00' },
         ];
       });
 
-      const ws = window.XLSX.utils.aoa_to_sheet([]);
-      window.XLSX.utils.sheet_add_aoa(ws, [headers]);
-      window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+      const ws = XLSX.utils.aoa_to_sheet([]);
+      XLSX.utils.sheet_add_aoa(ws, [headers]);
+      XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
+
+      // ✅ El bloque de corrección de fecha se elimina para usar el método de ExcelExporterManager
 
       ws['!cols'] = [
         { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
@@ -810,11 +815,11 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
         { wch: 20 }
       ];
 
-      const wb = window.XLSX.utils.book_new();
-      window.XLSX.utils.book_append_sheet(wb, ws, "Detalle de Transacciones");
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Detalle de Transacciones");
       
       const filename = `Detalle_Transacciones_${portfolio.name.replace(/\s/g, '_')}.xlsx`;
-      window.XLSX.writeFile(wb, filename);
+      XLSX.writeFile(wb, filename);
 
     } catch (err) {
       console.error("Error al exportar a Excel:", err);
@@ -1115,7 +1120,7 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
     ]
   };
   
-  // ✅ CORRECCIÓN FINAL: Lógica del plugin de texto central con centrado vertical y horizontal preciso.
+  // ✅ Lógica del plugin de texto central con centrado vertical y horizontal preciso.
   const centerTextPlugin = {
     id: 'centerText',
     beforeDraw(chart) {
@@ -1558,65 +1563,6 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                   onClick={() => setMonedaSeleccionada('ARS')}
                   className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
                 >
-                  ARS
-                </button>
-                <button
-                  onClick={() => setMonedaSeleccionada('USD')}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
-                >
-                  USD
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex flex-col md:flex-row space-y-8 md:space-y-0 md:space-x-8">
-              {/* Gráfico de Distribución por Activo */}
-              <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
-                <div className="w-full max-w-lg relative" key={`asset-chart-${monedaSeleccionada}`}>
-                  <Doughnut data={chartData} options={chartOptions} plugins={[centerTextPlugin]} />
-                </div>
-              </div>
-
-              {/* Gráfico de Distribución por Submercado */}
-              <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
-                <div className="w-full max-w-lg relative" key={`submarket-chart-${monedaSeleccionada}`}>
-                  <Doughnut data={submarketChartData} options={submarketChartOptions} plugins={[centerTextPlugin]} />
-                </div>
-              </div>
-            </div>
-
-            {resumenHoldingsToDisplay.length === 0 && (
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mt-6">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fillRule="evenodd" d="M8.257 3.518A8.96 8.96 0 0112 2.25c3.07 0 5.825 1.488 7.5 3.75a8.96 8.96 0 01-3.75 5.25c-.274-.294-.582-.55-.916-.77A5.992 5.992 0 0012 8.25a5.992 5.992 0 00-4.043 1.455c-.334.22-.642.476-.916.77a8.96 8.96 0 01-3.75-5.25c1.675-2.262 4.43-3.75 7.5-3.75zm1.53 10.96a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zm0 10.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-yellow-800">No hay datos para mostrar</h3>
-                    <div className="mt-2 text-sm text-yellow-700">
-                      <p>Para ver la distribución de tu portafolio, necesitas tener activos con un valor actual mayor a cero.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {currentSubView === 'tenencia' && (
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Detalle de Tenencia</h3>
-              <div className="flex items-center space-x-3">
-                <div className="bg-gray-200 rounded-full p-1 flex items-center">
-                  <button
-                    onClick={() => setMonedaSeleccionada('ARS')}
-                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
-                  >
                     ARS
                   </button>
                   <button
@@ -1626,585 +1572,645 @@ export default function PortfolioDetail({ portfolioId, user, setCurrentView, sel
                     USD
                   </button>
                 </div>
-                <button
-                  onClick={handleExportTenencias}
-                  disabled={isExporting || !isXLSXLoaded || transacciones.length === 0}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
-                    isExporting || !isXLSXLoaded || transacciones.length === 0
-                        ? 'bg-gray-400 cursor-not-allowed text-gray-200'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  }`}
-                >
-                  {isExporting ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
-                      </svg>
-                      <span>Generando Excel...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                      </svg>
-                      <span>Exportar a Excel</span>
-                    </>
-                  )}
-                </button>
               </div>
-            </div>
-            
-            <div className="overflow-y-auto max-h-[500px]">
-              {Object.values(metrics.holdings).map((holding) => {
-                if (holding.cantidad <= 0) return null;
+              
+              <div className="flex flex-col md:flex-row space-y-8 md:space-y-0 md:space-x-8">
+                {/* Gráfico de Distribución por Activo */}
+                <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Activo ({monedaSeleccionada})</h4>
+                  <div className="w-full max-w-lg relative" key={`asset-chart-${monedaSeleccionada}`}>
+                    <Doughnut data={chartData} options={chartOptions} plugins={[centerTextPlugin]} />
+                  </div>
+                </div>
 
-                const activoInfo = holding.activoInfo;
-                const compras = transacciones
-                  .filter(t => t.activo_id === activoInfo.id && t.tipo_operacion === 'compra')
-                  .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-                
-                if (compras.length === 0) return null;
+                {/* Gráfico de Distribución por Submercado */}
+                <div className="flex-1 bg-gray-50 p-6 rounded-lg shadow-inner flex flex-col items-center relative">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4">Distribución por Submercado ({monedaSeleccionada})</h4>
+                  <div className="w-full max-w-lg relative" key={`submarket-chart-${monedaSeleccionada}`}>
+                    <Doughnut data={submarketChartData} options={submarketChartOptions} plugins={[centerTextPlugin]} />
+                  </div>
+                </div>
+              </div>
 
-                const costoTotalHolding = monedaSeleccionada === 'ARS' ? holding.costo_total_ars : holding.costo_total_usd;
-                const esBono = activoInfo?.tipo?.toLowerCase() === 'bono';
-                const valorActualHolding = monedaSeleccionada === 'ARS'
-                  ? (esBono ? activoInfo.ultimo_precio_ars : activoInfo.ultimo_precio_ars) * holding.cantidad / (esBono ? 100 : 1)
-                  : (esBono ? activoInfo.ultimo_precio / 100 : activoInfo.ultimo_precio) * holding.cantidad;
-                const rendimientoMontoHolding = valorActualHolding - costoTotalHolding;
-                const rendimientoPorcentajeHolding = costoTotalHolding > 0 ? (valorActualHolding / costoTotalHolding - 1) * 100 : 0;
-
-
-                return (
-                  <div key={activoInfo.id} className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-md font-semibold text-gray-800">{activoInfo.nombre} ({activoInfo.simbolo})</h4>
-                      <p className="text-sm text-gray-600">Cantidad Total: {holding.cantidad.toLocaleString('es-AR')}</p>
+              {resumenHoldingsToDisplay.length === 0 && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mt-6">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M8.257 3.518A8.96 8.96 0 0112 2.25c3.07 0 5.825 1.488 7.5 3.75a8.96 8.96 0 01-3.75 5.25c-.274-.294-.582-.55-.916-.77A5.992 5.992 0 0012 8.25a5.992 5.992 0 00-4.043 1.455c-.334.22-.642.476-.916.77a8.96 8.96 0 01-3.75-5.25c1.675-2.262 4.43-3.75 7.5-3.75zm1.53 10.96a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zm0 10.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" clipRule="evenodd" />
+                      </svg>
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-4 mb-4">
-                      <div className="bg-white rounded-lg p-3">
-                        <p className="text-sm text-gray-500">Costo Total</p>
-                        <p className="text-lg font-bold text-gray-800">
-                           {costoTotalHolding.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
-                        </p>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-yellow-800">No hay datos para mostrar</h3>
+                      <div className="mt-2 text-sm text-yellow-700">
+                        <p>Para ver la distribución de tu portafolio, necesitas tener activos con un valor actual mayor a cero.</p>
                       </div>
-                      <div className="bg-white rounded-lg p-3">
-                        <p className="text-sm text-gray-500">Valor Actual</p>
-                        <p className="text-lg font-bold text-gray-800">
-                          {valorActualHolding.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
-                        </p>
-                      </div>
-                      <div className="bg-white rounded-lg p-3">
-                        <p className="text-sm text-gray-500">Rendimiento</p>
-                        <p className={`text-lg font-bold ${rendimientoMontoHolding >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {rendimientoMontoHolding.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
-                        </p>
-                        <p className={`text-xs font-medium ${rendimientoMontoHolding >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {rendimientoPorcentajeHolding.toFixed(2)}%
-                        </p>
-                      </div>
-                    </div>
-
-                    <h5 className="text-sm font-semibold text-gray-700 mb-2">Detalle de Compras:</h5>
-                    <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-100 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Nominales</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unitario ({monedaSeleccionada})</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costo Total ({monedaSeleccionada})</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Actual</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Rendimiento</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {compras.map(t => {
-                          const costoTransaccion = getTransactionCost(t, monedaSeleccionada);
-                          const esBonoTransaccion = t.activos?.tipo?.toLowerCase() === 'bono';
-                          const ultimoPrecio = monedaSeleccionada === 'ARS' ? t.activos.ultimo_precio_ars : t.activos.ultimo_precio;
-                          const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio) * t.cantidad;
-                          const rendimientoMontoTransaccion = valorActualTransaccion - costoTransaccion;
-                          const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) * 100 : 0;
-
-                          return (
-                            <tr key={t.id}>
-                              <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{formatDate(t.fecha)}</td>
-                              <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{t.cantidad.toLocaleString('es-AR')}</td>
-                              <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
-                                {monedaSeleccionada === 'USD'
-                                  ? `$${getTransactionPrice(t, monedaSeleccionada).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
-                                  : `$${getTransactionPrice(t, monedaSeleccionada).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
-                                {costoTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
-                                {valorActualTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
-                              </td>
-                              <td className={`px-4 py-2 whitespace-nowrap text-sm font-semibold text-right ${rendimientoMontoTransaccion >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {rendimientoMontoTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
-                                <p className="text-xs font-medium">{rendimientoPorcentajeTransaccion.toFixed(2)}%</p>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {currentSubView === 'transacciones' && (
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Transacciones</h3>
-              <div className="flex items-center space-x-3">
-                <div className="bg-gray-200 rounded-full p-1 flex items-center">
+          {currentSubView === 'tenencia' && (
+            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Detalle de Tenencia</h3>
+                <div className="flex items-center space-x-3">
+                  <div className="bg-gray-200 rounded-full p-1 flex items-center">
+                    <button
+                      onClick={() => setMonedaSeleccionada('ARS')}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      ARS
+                    </button>
+                    <button
+                      onClick={() => setMonedaSeleccionada('USD')}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionada === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      USD
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setMonedaSeleccionadaTransacciones('ARS')}
-                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionadaTransacciones === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                    onClick={handleExportTenencias}
+                    disabled={isExporting || !isXLSXLoaded || transacciones.length === 0}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
+                      isExporting || !isXLSXLoaded || transacciones.length === 0
+                          ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    }`}
                   >
-                    ARS
-                  </button>
-                  <button
-                    onClick={() => setMonedaSeleccionadaTransacciones('USD')}
-                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionadaTransacciones === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
-                  >
-                    USD
+                    {isExporting ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                        </svg>
+                        <span>Generando Excel...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        <span>Exportar a Excel</span>
+                      </>
+                    )}
                   </button>
                 </div>
-                <button
-                  onClick={handleExportTransacciones}
-                  disabled={isExporting || !isXLSXLoaded || transacciones.length === 0}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
-                    isExporting || !isXLSXLoaded || transacciones.length === 0
-                        ? 'bg-gray-400 cursor-not-allowed text-gray-200'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  }`}
-                >
-                  {isExporting ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
-                      </svg>
-                      <span>Generando Excel...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                      </svg>
-                      <span>Exportar a Excel</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => handleOpenNewTransactionModal('compra')}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  + Añadir Compra
-                </button>
-                <button
-                  onClick={() => handleOpenNewTransactionModal('venta')}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  + Añadir Venta
-                </button>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[500px]">
+                {Object.values(metrics.holdings).map((holding) => {
+                  if (holding.cantidad <= 0) return null;
+
+                  const activoInfo = holding.activoInfo;
+                  const compras = transacciones
+                    .filter(t => t.activo_id === activoInfo.id && t.tipo_operacion === 'compra')
+                    .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+                  
+                  if (compras.length === 0) return null;
+
+                  const costoTotalHolding = monedaSeleccionada === 'ARS' ? holding.costo_total_ars : holding.costo_total_usd;
+                  const esBono = activoInfo?.tipo?.toLowerCase() === 'bono';
+                  const valorActualHolding = monedaSeleccionada === 'ARS'
+                    ? (esBono ? activoInfo.ultimo_precio_ars : activoInfo.ultimo_precio_ars) * holding.cantidad / (esBono ? 100 : 1)
+                    : (esBono ? activoInfo.ultimo_precio / 100 : activoInfo.ultimo_precio) * holding.cantidad;
+                  const rendimientoMontoHolding = valorActualHolding - costoTotalHolding;
+                  const rendimientoPorcentajeHolding = costoTotalHolding > 0 ? (valorActualHolding / costoTotalHolding - 1) * 100 : 0;
+
+
+                  return (
+                    <div key={activoInfo.id} className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-md font-semibold text-gray-800">{activoInfo.nombre} ({activoInfo.simbolo})</h4>
+                        <p className="text-sm text-gray-600">Cantidad Total: {holding.cantidad.toLocaleString('es-AR')}</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="bg-white rounded-lg p-3">
+                          <p className="text-sm text-gray-500">Costo Total</p>
+                          <p className="text-lg font-bold text-gray-800">
+                            {costoTotalHolding.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                          </p>
+                        </div>
+                        <div className="bg-white rounded-lg p-3">
+                          <p className="text-sm text-gray-500">Valor Actual</p>
+                          <p className="text-lg font-bold text-gray-800">
+                            {valorActualHolding.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                          </p>
+                        </div>
+                        <div className="bg-white rounded-lg p-3">
+                          <p className="text-sm text-gray-500">Rendimiento</p>
+                          <p className={`text-lg font-bold ${rendimientoMontoHolding >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {rendimientoMontoHolding.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                          </p>
+                          <p className={`text-xs font-medium ${rendimientoMontoHolding >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {rendimientoPorcentajeHolding.toFixed(2)}%
+                          </p>
+                        </div>
+                      </div>
+
+                      <h5 className="text-sm font-semibold text-gray-700 mb-2">Detalle de Compras:</h5>
+                      <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-100 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Nominales</th>
+                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unitario ({monedaSeleccionada})</th>
+                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costo Total ({monedaSeleccionada})</th>
+                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Actual</th>
+                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Rendimiento</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {compras.map(t => {
+                            const costoTransaccion = getTransactionCost(t, monedaSeleccionada);
+                            const esBonoTransaccion = t.activos?.tipo?.toLowerCase() === 'bono';
+                            const ultimoPrecio = monedaSeleccionada === 'ARS' ? t.activos.ultimo_precio_ars : t.activos.ultimo_precio;
+                            const valorActualTransaccion = (esBonoTransaccion ? ultimoPrecio / 100 : ultimoPrecio) * t.cantidad;
+                            const rendimientoMontoTransaccion = valorActualTransaccion - costoTransaccion;
+                            const rendimientoPorcentajeTransaccion = costoTransaccion > 0 ? (valorActualTransaccion / costoTransaccion - 1) * 100 : 0;
+
+                            return (
+                              <tr key={t.id}>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{formatDate(t.fecha)}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{t.cantidad.toLocaleString('es-AR')}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
+                                  {monedaSeleccionada === 'USD'
+                                    ? `$${getTransactionPrice(t, monedaSeleccionada).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
+                                    : `$${getTransactionPrice(t, monedaSeleccionada).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
+                                  {costoTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 text-right">
+                                  {valorActualTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                                </td>
+                                <td className={`px-4 py-2 whitespace-nowrap text-sm font-semibold text-right ${rendimientoMontoTransaccion >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {rendimientoMontoTransaccion.toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionada })}
+                                  <p className="text-xs font-medium">{rendimientoPorcentajeTransaccion.toFixed(2)}%</p>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
+          )}
 
-            {transacciones.length > 0 ? (
+          {currentSubView === 'transacciones' && (
+            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Transacciones</h3>
+                <div className="flex items-center space-x-3">
+                  <div className="bg-gray-200 rounded-full p-1 flex items-center">
+                    <button
+                      onClick={() => setMonedaSeleccionadaTransacciones('ARS')}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionadaTransacciones === 'ARS' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      ARS
+                    </button>
+                    <button
+                      onClick={() => setMonedaSeleccionadaTransacciones('USD')}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${monedaSeleccionadaTransacciones === 'USD' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      USD
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleExportTransacciones}
+                    disabled={isExporting || !isXLSXLoaded || transacciones.length === 0}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2 ${
+                      isExporting || !isXLSXLoaded || transacciones.length === 0
+                          ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    }`}
+                  >
+                    {isExporting ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.962l2-2.671z"></path>
+                        </svg>
+                        <span>Generando Excel...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        <span>Exportar a Excel</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleOpenNewTransactionModal('compra')}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    + Añadir Compra
+                  </button>
+                  <button
+                    onClick={() => handleOpenNewTransactionModal('venta')}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    + Añadir Venta
+                  </button>
+                </div>
+              </div>
+
+              {transacciones.length > 0 ? (
+                <div className="overflow-y-auto max-h-[500px]">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-30">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('activo')}>
+                          Activo
+                          {sortConfig.key === 'activo' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bróker</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('fecha')}>
+                          Fecha
+                          {sortConfig.key === 'fecha' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('tipo_operacion')}>
+                          Tipo
+                          {sortConfig.key === 'tipo_operacion' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('cantidad')}>
+                          Nominales
+                          {sortConfig.key === 'cantidad' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('moneda')}>
+                          Moneda de Origen
+                          {sortConfig.key === 'moneda' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Cambio</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('precio_unitario')}>
+                          Precio Unitario ({monedaSeleccionadaTransacciones})
+                          {sortConfig.key === 'precio_unitario' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('costo_total')}>
+                          Costo Total ({monedaSeleccionadaTransacciones})
+                          {sortConfig.key === 'costo_total' && (
+                            <span className="ml-1">
+                              {sortConfig.direction === 'ascending' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </th>
+                        <th className="relative px-6 py-3"><span className="sr-only">Acciones</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {transactionsToDisplay.map(t => (
+                        <tr key={t.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{t.activos.nombre} ({t.activos.simbolo})</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{t.brokers?.nombre || '-'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{formatDate(t.fecha)}</td>
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${t.tipo_operacion === 'compra' ? 'text-green-600' : 'text-red-600'}`}>
+                            {t.tipo_operacion.toUpperCase()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
+                            {t.cantidad.toLocaleString('es-AR')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{t.moneda}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
+                            {getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
+                            {getTransactionPrice(t, monedaSeleccionadaTransacciones).toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionadaTransacciones })}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
+                            {getTransactionCost(t, monedaSeleccionadaTransacciones).toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionadaTransacciones })}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button onClick={() => handleOpenEditModal(t)} className="text-indigo-600 hover:text-indigo-900 mr-4">Editar</button>
+                            <button onClick={() => handleDeleteTransaction(t.id)} className="text-red-600 hover:text-red-900">Eliminar</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-center text-gray-500">Aún no hay transacciones para este portafolio.</p>
+              )}
+            </div>
+          )}
+          
+          {currentSubView === 'brokers' && (
+            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Registros de Brókers</h3>
+                <button 
+                  onClick={() => openBrokerModal()}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  <span>Nuevo Bróker</span>
+                </button>
+              </div>
+
               <div className="overflow-y-auto max-h-[500px]">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-30">
+                  <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('activo')}>
-                        Activo
-                        {sortConfig.key === 'activo' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bróker</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('fecha')}>
-                        Fecha
-                        {sortConfig.key === 'fecha' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('tipo_operacion')}>
-                        Tipo
-                        {sortConfig.key === 'tipo_operacion' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('cantidad')}>
-                        Nominales
-                        {sortConfig.key === 'cantidad' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('moneda')}>
-                        Moneda de Origen
-                        {sortConfig.key === 'moneda' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Cambio</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('precio_unitario')}>
-                        Precio Unitario ({monedaSeleccionadaTransacciones})
-                        {sortConfig.key === 'precio_unitario' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('costo_total')}>
-                        Costo Total ({monedaSeleccionadaTransacciones})
-                        {sortConfig.key === 'costo_total' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </th>
-                      <th className="relative px-6 py-3"><span className="sr-only">Acciones</span></th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cuenta Comitente</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {transactionsToDisplay.map(t => (
-                      <tr key={t.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{t.activos.nombre} ({t.activos.simbolo})</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{t.brokers?.nombre || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{formatDate(t.fecha)}</td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${t.tipo_operacion === 'compra' ? 'text-green-600' : 'text-red-600'}`}>
-                          {t.tipo_operacion.toUpperCase()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
-                          {t.cantidad.toLocaleString('es-AR')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{t.moneda}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
-                          {getTipoCambioPorFecha(t.fecha) > 0 ? getTipoCambioPorFecha(t.fecha).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
-                          {getTransactionPrice(t, monedaSeleccionadaTransacciones).toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionadaTransacciones })}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
-                          {getTransactionCost(t, monedaSeleccionadaTransacciones).toLocaleString('es-AR', { style: 'currency', currency: monedaSeleccionadaTransacciones })}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => handleOpenEditModal(t)} className="text-indigo-600 hover:text-indigo-900 mr-4">Editar</button>
-                          <button onClick={() => handleDeleteTransaction(t.id)} className="text-red-600 hover:text-red-900">Eliminar</button>
+                    {brokers.length > 0 ? (
+                      brokers.map(broker => (
+                        <tr key={broker.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{broker.nombre}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{broker.cuenta_comitente}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{broker.descripcion}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => openBrokerModal(broker)}
+                              className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors duration-150"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => openDeleteBrokerModal(broker)}
+                              className="text-red-600 hover:text-red-800 transition-colors duration-150"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                          No hay brókers registrados.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <p className="text-center text-gray-500">Aún no hay transacciones para este portafolio.</p>
-            )}
+            </div>
+          )}
+        </main>
+
+        {/* Modal para Añadir/Editar Transacción */}
+        {showAddTransactionModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                {editingTransaction ? 'Editar Transacción' : (newTransaction.tipo_operacion === 'compra' ? 'Añadir Nueva Compra' : 'Añadir Nueva Venta')}
+              </h3>
+              <form onSubmit={handleSaveTransaction}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Activo</label>
+                    <select
+                      name="activo_id"
+                      value={newTransaction.activo_id}
+                      onChange={handleTransactionChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Selecciona un activo</option>
+                      {activos.map(activo => (
+                        <option key={activo.id} value={activo.id}>
+                          {activo.simbolo}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Bróker</label>
+                    <select
+                      name="broker_id"
+                      value={newTransaction.broker_id}
+                      onChange={handleTransactionChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Selecciona un bróker</option>
+                      {brokers.map(broker => (
+                        <option key={broker.id} value={broker.id}>
+                          {broker.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-sm font-medium text-gray-700">Cantidad</label>
+                      {newTransaction.tipo_operacion === 'venta' && newTransaction.activo_id && newTransaction.broker_id && (
+                        <span className="text-xs text-gray-500">Disponible: {cantidadDisponible.toLocaleString('es-AR')}</span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      name="cantidad"
+                      value={newTransaction.cantidad}
+                      onChange={handleTransactionChange}
+                      placeholder="Ej: 100"
+                      step="any"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unitario</label>
+                    <input
+                      type="number"
+                      name="precio_unitario"
+                      value={newTransaction.precio_unitario}
+                      onChange={handleTransactionChange}
+                      placeholder="Ej: 15000"
+                      step="0.01"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                    <input
+                      type="date"
+                      name="fecha"
+                      value={newTransaction.fecha}
+                      onChange={handleTransactionChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
+                    <select
+                      name="moneda"
+                      value={newTransaction.moneda}
+                      onChange={handleTransactionChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="ARS">ARS</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddTransactionModal(false);
+                      setEditingTransaction(null);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    {editingTransaction ? 'Guardar Cambios' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
         
-        {currentSubView === 'brokers' && (
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Registros de Brókers</h3>
-              <button 
-                onClick={() => openBrokerModal()}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center space-x-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                <span>Nuevo Bróker</span>
-              </button>
-            </div>
+        {/* Modal para Añadir/Editar Bróker */}
+        {showBrokerModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                {editingBroker ? 'Editar Bróker' : 'Nuevo Bróker'}
+              </h3>
+              
+              {brokerFormError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4 text-sm">
+                  {brokerFormError}
+                </div>
+              )}
 
-            <div className="overflow-y-auto max-h-[500px]">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cuenta Comitente</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {brokers.length > 0 ? (
-                    brokers.map(broker => (
-                      <tr key={broker.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{broker.nombre}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{broker.cuenta_comitente}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{broker.descripcion}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => openBrokerModal(broker)}
-                            className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors duration-150"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => openDeleteBrokerModal(broker)}
-                            className="text-red-600 hover:text-red-800 transition-colors duration-150"
-                          >
-                            Eliminar
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                        No hay brókers registrados.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              <form onSubmit={handleBrokerSubmit}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                    <input
+                      type="text"
+                      name="nombre"
+                      value={brokerFormData.nombre}
+                      onChange={handleBrokerInputChange}
+                      placeholder="Ej: Brubank"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta Comitente</label>
+                    <input
+                      type="text"
+                      name="cuenta_comitente"
+                      value={brokerFormData.cuenta_comitente}
+                      onChange={handleBrokerInputChange}
+                      placeholder="Ej: 12345678"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Descripción (Opcional)</label>
+                    <input
+                      type="text"
+                      name="descripcion"
+                      value={brokerFormData.descripcion}
+                      onChange={handleBrokerInputChange}
+                      placeholder="Ej: Bróker principal"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={closeBrokerModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors duration-150"
+                  >
+                    {editingBroker ? 'Actualizar' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
-      </main>
-
-      {/* Modal para Añadir/Editar Transacción */}
-      {showAddTransactionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              {editingTransaction ? 'Editar Transacción' : (newTransaction.tipo_operacion === 'compra' ? 'Añadir Nueva Compra' : 'Añadir Nueva Venta')}
-            </h3>
-            <form onSubmit={handleSaveTransaction}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Activo</label>
-                  <select
-                    name="activo_id"
-                    value={newTransaction.activo_id}
-                    onChange={handleTransactionChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Selecciona un activo</option>
-                    {activos.map(activo => (
-                      <option key={activo.id} value={activo.id}>
-                        {activo.simbolo}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Bróker</label>
-                  <select
-                    name="broker_id"
-                    value={newTransaction.broker_id}
-                    onChange={handleTransactionChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Selecciona un bróker</option>
-                    {brokers.map(broker => (
-                      <option key={broker.id} value={broker.id}>
-                        {broker.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Cantidad</label>
-                    {newTransaction.tipo_operacion === 'venta' && newTransaction.activo_id && newTransaction.broker_id && (
-                      <span className="text-xs text-gray-500">Disponible: {cantidadDisponible.toLocaleString('es-AR')}</span>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    name="cantidad"
-                    value={newTransaction.cantidad}
-                    onChange={handleTransactionChange}
-                    placeholder="Ej: 100"
-                    step="any"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unitario</label>
-                  <input
-                    type="number"
-                    name="precio_unitario"
-                    value={newTransaction.precio_unitario}
-                    onChange={handleTransactionChange}
-                    placeholder="Ej: 15000"
-                    step="0.01"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-                  <input
-                    type="date"
-                    name="fecha"
-                    value={newTransaction.fecha}
-                    onChange={handleTransactionChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
-                  <select
-                    name="moneda"
-                    value={newTransaction.moneda}
-                    onChange={handleTransactionChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="ARS">ARS</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
+        
+        {/* Modal de Confirmación de Eliminación de Bróker */}
+        {showDeleteBrokerModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-auto">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirmar Eliminación</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                ¿Estás seguro de que deseas eliminar el bróker <span className="font-semibold">{brokerToDelete?.nombre}</span>? Esta acción no se puede deshacer y fallará si hay transacciones asociadas.
+              </p>
+              <div className="flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowAddTransactionModal(false);
-                    setEditingTransaction(null);
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
-                >
-                  {editingTransaction ? 'Guardar Cambios' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      
-      {/* Modal para Añadir/Editar Bróker */}
-      {showBrokerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              {editingBroker ? 'Editar Bróker' : 'Nuevo Bróker'}
-            </h3>
-            
-            {brokerFormError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4 text-sm">
-                {brokerFormError}
-              </div>
-            )}
-
-            <form onSubmit={handleBrokerSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-                  <input
-                    type="text"
-                    name="nombre"
-                    value={brokerFormData.nombre}
-                    onChange={handleBrokerInputChange}
-                    placeholder="Ej: Brubank"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta Comitente</label>
-                  <input
-                    type="text"
-                    name="cuenta_comitente"
-                    value={brokerFormData.cuenta_comitente}
-                    onChange={handleBrokerInputChange}
-                    placeholder="Ej: 12345678"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Descripción (Opcional)</label>
-                  <input
-                    type="text"
-                    name="descripcion"
-                    value={brokerFormData.descripcion}
-                    onChange={handleBrokerInputChange}
-                    placeholder="Ej: Bróker principal"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={closeBrokerModal}
+                  onClick={closeDeleteBrokerModal}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors duration-150"
+                  type="button"
+                  onClick={handleDeleteBroker}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors duration-150"
                 >
-                  {editingBroker ? 'Actualizar' : 'Guardar'}
+                  Eliminar
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-      
-      {/* Modal de Confirmación de Eliminación de Bróker */}
-      {showDeleteBrokerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-auto">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirmar Eliminación</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              ¿Estás seguro de que deseas eliminar el bróker <span className="font-semibold">{brokerToDelete?.nombre}</span>? Esta acción no se puede deshacer y fallará si hay transacciones asociadas.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={closeDeleteBrokerModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors duration-150"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteBroker}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors duration-150"
-              >
-                Eliminar
-              </button>
             </div>
           </div>
-        </div>
-      )}
-    </>
-  );
-}
+        )}
+      </>
+    );
+  }
+

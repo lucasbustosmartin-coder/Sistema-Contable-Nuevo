@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import iconImage from '../assets/icon.png';
+import * as XLSX from 'xlsx';
 
 export default function ExcelExporterManager({ user, setCurrentView }) {
   const [data, setData] = useState([]);
@@ -11,25 +12,18 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
   const today = new Date();
   const lastMonth = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   lastMonth.setMonth(lastMonth.getMonth() - 1);
-  const formatDate = (date) => date.toISOString().split('T')[0];
-  const [fechaDesde, setFechaDesde] = useState(formatDate(lastMonth));
-  const [fechaHasta, setFechaHasta] = useState(formatDate(today));
 
-  const [isXLSXLoaded, setIsXLSXLoaded] = useState(false);
+  const formatLocalDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [fechaDesde, setFechaDesde] = useState(formatLocalDate(lastMonth));
+  const [fechaHasta, setFechaHasta] = useState(formatLocalDate(today));
+
   const [isExporting, setIsExporting] = useState(false);
-
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    script.onload = () => setIsXLSXLoaded(true);
-    script.onerror = () => {
-      console.error("Error al cargar la librería de Excel.");
-      alert("Error al cargar la librería de Excel. Por favor, recarga la página.");
-    };
-    document.head.appendChild(script);
-
-    return () => document.head.removeChild(script);
-  }, []);
 
   useEffect(() => {
     handleVer();
@@ -39,18 +33,21 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
     setLoading(true);
     setError(null);
     try {
-      // 1. Cargar tipos de cambio en el rango de fechas
+      const endOfDay = new Date(fechaHasta);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+      const fechaHastaPlusOneDay = formatLocalDate(endOfDay);
+      
       let tcQuery = supabase
         .from('tipos_cambio')
         .select('fecha, tasa')
         .eq('usuario_id', user.id);
 
       if (fechaDesde && fechaHasta) {
-        tcQuery = tcQuery.gte('fecha', fechaDesde).lte('fecha', fechaHasta);
+        tcQuery = tcQuery.gte('fecha', fechaDesde).lt('fecha', fechaHastaPlusOneDay);
       } else if (fechaDesde) {
         tcQuery = tcQuery.gte('fecha', fechaDesde);
       } else if (fechaHasta) {
-        tcQuery = tcQuery.lte('fecha', fechaHasta);
+        tcQuery = tcQuery.lt('fecha', fechaHastaPlusOneDay);
       }
 
       const { data: tiposData, error: tcError } = await tcQuery;
@@ -62,7 +59,6 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
       });
       setTiposCambio(tiposMap);
 
-      // 2. Cargar entradas contables
       let query = supabase
         .from('entradas_contables')
         .select(`
@@ -81,11 +77,11 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
         .order('fecha', { ascending: false });
 
       if (fechaDesde && fechaHasta) {
-        query = query.gte('fecha', fechaDesde).lte('fecha', fechaHasta);
+        query = query.gte('fecha', fechaDesde).lt('fecha', fechaHastaPlusOneDay);
       } else if (fechaDesde) {
         query = query.gte('fecha', fechaDesde);
       } else if (fechaHasta) {
-        query = query.lte('fecha', fechaHasta);
+        query = query.lt('fecha', fechaHastaPlusOneDay);
       }
 
       const { data: entriesData, error: entriesError } = await query;
@@ -101,11 +97,6 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
   };
 
   const handleExportarVista = async () => {
-    if (!isXLSXLoaded) {
-      alert('La librería de exportación a Excel aún no ha cargado.');
-      return;
-    }
-
     if (!data || data.length === 0) {
       alert('No hay datos en la tabla para exportar.');
       return;
@@ -114,56 +105,43 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
     setIsExporting(true);
 
     try {
-      const headers = [
-        'Fecha',
-        'Rubro',
-        'Concepto',
-        'Moneda',
-        'Valor ARS',
-        'Valor USD',
-        'Tipo de Cambio (ARS/USD)'
-      ];
-
       const dataToExport = data.map(entry => {
-        const fechaFormatted = new Date(entry.fecha + 'T00:00:00').toLocaleDateString('es-AR');
         const tasa = tiposCambio[entry.fecha] ?? 'N/A';
-
-        return [
-          { v: fechaFormatted, t: 's' },
-          { v: entry.conceptos_contables?.rubros?.nombre || '', t: 's' },
-          { v: entry.conceptos_contables?.concepto || '', t: 's' },
-          { v: entry.moneda, t: 's' },
-          { v: parseFloat(entry.importe_ars), t: 'n', z: '#,##0.00' },
-          { v: parseFloat(entry.importe_usd), t: 'n', z: '#,##0.00' },
-          { v: typeof tasa === 'number' ? tasa : null, t: 'n', z: '#,##0.00' }
-        ];
+        
+        // CORRECCIÓN FINAL: se usa la cadena de fecha para evitar problemas de zona horaria en Excel.
+        // Excel procesará este valor como texto, no como fecha, para evitar el desfase.
+        // Después, en Excel, puedes convertir la columna a formato de fecha si es necesario.
+        return {
+          Fecha: entry.fecha, 
+          Rubro: entry.conceptos_contables?.rubros?.nombre || '',
+          Concepto: entry.conceptos_contables?.concepto || '',
+          Moneda: entry.moneda,
+          'Valor ARS': parseFloat(entry.importe_ars),
+          'Valor USD': parseFloat(entry.importe_usd),
+          'Tipo de Cambio (ARS/USD)': typeof tasa === 'number' ? tasa : 'N/A'
+        };
       });
 
-      const ws = window.XLSX.utils.aoa_to_sheet([]);
-      window.XLSX.utils.sheet_add_aoa(ws, [headers]);
-      window.XLSX.utils.sheet_add_aoa(ws, dataToExport, { origin: 'A2' });
-
-      ws['!cols'] = [
-        { wch: 12 },
-        { wch: 20 },
-        { wch: 25 },
-        { wch: 10 },
-        { wch: 15 },
-        { wch: 15 },
-        { wch: 18 }
-      ];
-
-      const wb = window.XLSX.utils.book_new();
-      window.XLSX.utils.book_append_sheet(wb, ws, "Registros");
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
       
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Registros");
+      
+      const colFecha = 'A';
+      for (let i = 2; i <= dataToExport.length + 1; i++) {
+        const cell = ws[colFecha + i];
+        if (cell && cell.t === 'd') {
+          cell.z = 'dd/mm/yyyy'; 
+        }
+      }
+
       const filename = `Registros_${new Date().toISOString().split('T')[0]}.xlsx`;
-      window.XLSX.writeFile(wb, filename);
+      XLSX.writeFile(wb, filename);
 
     } catch (err) {
       console.error("Error al exportar a Excel:", err);
       alert("Error al exportar a Excel. Inténtalo de nuevo.");
     } finally {
-      await new Promise(resolve => setTimeout(resolve, 100));
       setIsExporting(false);
     }
   };
@@ -210,9 +188,9 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
                   </button>
                   <button
                     onClick={handleExportarVista}
-                    disabled={!isXLSXLoaded || data.length === 0 || isExporting}
+                    disabled={data.length === 0 || isExporting}
                     className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center justify-center space-x-2 ${
-                      !isXLSXLoaded || data.length === 0 || isExporting
+                      data.length === 0 || isExporting
                         ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
@@ -265,10 +243,15 @@ export default function ExcelExporterManager({ user, setCurrentView }) {
                     {data.length > 0 ? (
                       data.map((entry, index) => {
                         const tasa = tiposCambio[entry.fecha] ?? 'N/A';
+                        
+                        // Separar la fecha en sus partes
+                        const [year, month, day] = entry.fecha.split('-');
+                        
                         return (
                           <tr key={index}>
                             <td className="p-1 whitespace-nowrap text-sm font-medium text-gray-800">
-                              {new Date(entry.fecha + 'T00:00:00').toLocaleDateString('es-AR')}
+                              {/* Esta es la linea corregida para la visualización en la tabla */}
+                              {`${day}/${month}/${year}`}
                             </td>
                             <td className="p-1 whitespace-nowrap text-sm text-gray-600">{entry.conceptos_contables?.rubros?.nombre}</td>
                             <td className="p-1 whitespace-nowrap text-sm text-gray-600">{entry.conceptos_contables?.concepto}</td>
